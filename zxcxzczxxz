@@ -1,13 +1,13 @@
 --[[
 	Rain Web v2 - rain.lua body + rainnewuiloader-web (NO embedded config table)
-	Dashboard: http://127.0.0.1:8781  (npm start / npm run dev)
+	Dashboard: https://getrain.club
 	Config comes only from the website (/api/bootstrap + live sync).
 ]]
 
 if typeof(getgenv) == "function" then
 	local g = getgenv()
 	g.RAIN_WEB = true
-	g.RAIN_WEB_URL = g.RAIN_WEB_URL or g.RAIN_LOADER_PUBLIC_URL or "http://127.0.0.1:8781"
+	g.RAIN_WEB_URL = g.RAIN_WEB_URL or g.RAIN_LOADER_PUBLIC_URL or "http://getrain.club"
 	g.RAIN_WEB_MODE = g.RAIN_WEB_MODE or "rage"
 	-- rainweb never loads the in-game menu UI
 	g.RainTableNoUI = true
@@ -88,7 +88,11 @@ do
 	end
 
 	local g = typeof(getgenv) == "function" and getgenv() or {}
-	local base = tostring(g.RAIN_WEB_URL or "http://127.0.0.1:8781"):gsub("/$", "")
+	local base = tostring(g.RAIN_WEB_URL or "http://getrain.club"):gsub("/$", "")
+	-- Prefer plain HTTP: getrain.club HTTPS is not ready (cert/443), Roblox fails on https.
+	if base:match("^https://getrain%.club") then
+		base = "http://getrain.club"
+	end
 	local mode = tostring(g.RAIN_WEB_MODE or "rage")
 	local key = tostring(g.RAIN_LOADER_KEY or g.LOADER_KEY or "")
 	if (key == "" or key == "nil") and type(LOADER_KEY) == "string" then
@@ -7660,7 +7664,7 @@ Mango = {
         NameESP = {},
     }
 }
-if not shared.rain.SilentAim.Enabled then
+if not (type(shared.rain.SilentAim) == "table" and shared.rain.SilentAim.Enabled) then
     clrAim()
 end
 rainSyncNameEspActive67()
