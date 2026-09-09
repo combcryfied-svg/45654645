@@ -7,7 +7,7 @@
 if typeof(getgenv) == "function" then
 	local g = getgenv()
 	g.RAIN_WEB = true
-	g.RAIN_WEB_URL = g.RAIN_WEB_URL or g.RAIN_LOADER_PUBLIC_URL or "http://getrain.club"
+	g.RAIN_WEB_URL = g.RAIN_WEB_URL or g.RAIN_LOADER_PUBLIC_URL or "https://getrain.club"
 	g.RAIN_WEB_MODE = g.RAIN_WEB_MODE or "rage"
 	-- rainweb never loads the in-game menu UI
 	g.RainTableNoUI = true
@@ -88,10 +88,10 @@ do
 	end
 
 	local g = typeof(getgenv) == "function" and getgenv() or {}
-	local base = tostring(g.RAIN_WEB_URL or "http://getrain.club"):gsub("/$", "")
-	-- Prefer plain HTTP: getrain.club HTTPS is not ready (cert/443), Roblox fails on https.
-	if base:match("^https://getrain%.club") then
-		base = "http://getrain.club"
+	local base = tostring(g.RAIN_WEB_URL or "https://getrain.club"):gsub("/$", "")
+	-- Prefer HTTPS; upgrade legacy http://getrain.club URLs.
+	if base:match("^http://getrain%.club") then
+		base = "https://getrain.club"
 	end
 	local mode = tostring(g.RAIN_WEB_MODE or "rage")
 	local key = tostring(g.RAIN_LOADER_KEY or g.LOADER_KEY or "")
@@ -4114,16 +4114,17 @@ function magicBulletPatchShootArgs67(args, argc)
             end
         end
         args[4] = headPos
-        if headPart then
+        -- Only write hit Instance into slots that are already Instance/nil — never bools.
+        if headPart and (args[5] == nil or typeof(args[5]) == "Instance") then
             args[5] = headPart
-        elseif type(hcResolveHitPart) == "function" then
+        elseif type(hcResolveHitPart) == "function" and (args[5] == nil or typeof(args[5]) == "Instance") then
             local part = hcResolveHitPart(headPos)
             if part then
                 args[5] = part
                 headPart = part
             end
         end
-        if n >= 6 then
+        if n >= 6 and typeof(args[6]) ~= "boolean" then
             local origin = args[3]
             if typeof(origin) == "Vector3" then
                 local d = headPos - origin
@@ -4149,10 +4150,10 @@ function magicBulletPatchShootArgs67(args, argc)
             end
         end
         args[5] = headPos
-        if headPart then
+        if headPart and (args[6] == nil or typeof(args[6]) == "Instance") then
             args[6] = headPart
         end
-        if n >= 7 then
+        if n >= 7 and typeof(args[7]) ~= "boolean" then
             local origin = args[3]
             if typeof(origin) == "Vector3" then
                 local d = headPos - origin
@@ -6645,7 +6646,7 @@ function hcRedirectPos()
     if type(CurrentGame) ~= "table" or CurrentGame.UsesHoodCustoms ~= true then
         return nil
     end
-    if not shared.rain.SilentAim.Enabled then
+    if not (type(shared.rain) == "table" and type(shared.rain.SilentAim) == "table" and shared.rain.SilentAim.Enabled == true) then
         return nil
     end
     if not saFovReady67() then
@@ -7109,7 +7110,9 @@ function hcPatchShootPayload(payload)
     end
     if aimPlayer then
         for _, key in ipairs({ "CanHitPlayer", "Player", "TargetPlayer", "Victim" }) do
-            if payload[key] ~= nil then
+            -- Never overwrite booleans with a Player (causes "Unable to cast Instance to bool").
+            local cur = payload[key]
+            if typeof(cur) == "Instance" or type(cur) == "userdata" then
                 payload[key] = aimPlayer
                 patched = true
             end
@@ -7334,29 +7337,30 @@ function rainHookHcMouse67()
         return
     end
     local reentry = 0
+    local function rainSilentAimOn67()
+        return type(shared.rain) == "table"
+            and type(shared.rain.SilentAim) == "table"
+            and shared.rain.SilentAim.Enabled == true
+    end
     local function hcMouseResolve(self, key, oldIndex)
-        if key ~= "Hit" and key ~= "Target" then
+        -- Only redirect Hit (CFrame). Never rewrite Target — GunClientShotgun /
+        -- old clients feed Mouse.Target into bool slots and error with
+        -- "Unable to cast Instance to bool".
+        if key ~= "Hit" then
             return oldIndex(self, key)
         end
-        -- Force Hit redirects Mouse.Hit/Target to select-lock head (not SA FOV path).
+        -- Force Hit redirects Mouse.Hit to select-lock head (not SA FOV path).
         if type(magicBulletOn67) == "function" and magicBulletOn67() then
-            local _, headPos, headPart = magicBulletResolve67()
+            local _, headPos = magicBulletResolve67()
             if typeof(headPos) == "Vector3" then
-                if key == "Hit" then
-                    return CFrame.new(headPos)
-                end
-                if headPart then
-                    return headPart
-                end
-                if type(hcResolveHitPart) == "function" then
-                    local part = hcResolveHitPart(headPos)
-                    if part then
-                        return part
-                    end
-                end
+                return CFrame.new(headPos)
             end
         end
-        if not shared.rain.SilentAim.Enabled or not hcRedirectPos() then
+        if not rainSilentAimOn67() then
+            return oldIndex(self, key)
+        end
+        local redirect = typeof(hcRedirectPos) == "function" and hcRedirectPos() or nil
+        if typeof(redirect) ~= "Vector3" then
             return oldIndex(self, key)
         end
         if reentry > 0 then
@@ -7366,19 +7370,9 @@ function rainHookHcMouse67()
         local ok, pos = pcall(Player.GetHitPosition, "Silent")
         reentry = reentry - 1
         if ok and typeof(pos) == "Vector3" and pos.Magnitude > 1e-4 then
-            if key == "Hit" then
-                return CFrame.new(pos)
-            end
-            local aimPlayer = getSaPlr()
-            local char = aimPlayer and aimPlayer.Character
-            if char then
-                local part = hcResolveHitPart(pos)
-                if part then
-                    return part
-                end
-            end
+            return CFrame.new(pos)
         end
-        return oldIndex(self, key)
+        return CFrame.new(redirect)
     end
     local hooked = false
     pcall(function()
@@ -7419,7 +7413,7 @@ function rainHookHcMouse67()
             local oldGameIndex = grm.__index
             setreadonly(grm, false)
             grm.__index = LPH_NO_VIRTUALIZE(function(self, key)
-                if self == Mouse and (key == "Hit" or key == "Target") then
+                if self == Mouse and key == "Hit" then
                     return hcMouseResolve(self, key, oldGameIndex)
                 end
                 return oldGameIndex(self, key)
