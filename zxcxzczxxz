@@ -8189,7 +8189,7 @@ Games = {
             end,
         },
     },
-    [10765362533] = {
+    [10765980155] = {
         Name = "Der Hood",
         Updater = "D3RHooDMSOUEPoS233^+",
         HoodGame = true,
