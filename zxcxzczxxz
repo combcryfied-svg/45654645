@@ -6368,6 +6368,34 @@ function ghApplySaHit(payload, saHit)
         payload.LegitPosition = payload.AimPosition
     end
     payload.AimPosition = saHit
+    -- GunHandler.Shoot raycasts toward AimPosition unless Hit/AimLockPart is set.
+    -- Without a locked hit part, walls eat the shot and SA looks broken on ZHD/etc.
+    local hitPart = typeof(hcResolveHitPart) == "function" and hcResolveHitPart(saHit) or nil
+    if hitPart then
+        local hitVal = payload.Hit
+        if hitVal == nil or typeof(hitVal) == "Instance" then
+            payload.Hit = hitPart
+        end
+        local lockVal = payload.AimLockPart
+        if lockVal == nil or typeof(lockVal) == "Instance" then
+            payload.AimLockPart = hitPart
+        end
+        if payload.Instance == nil or typeof(payload.Instance) == "Instance" then
+            payload.Instance = hitPart
+        end
+        if payload.HitPart == nil or typeof(payload.HitPart) == "Instance" then
+            payload.HitPart = hitPart
+        end
+    end
+    local origin = typeof(shotOrig) == "function" and shotOrig(payload) or nil
+    if typeof(origin) == "Vector3" then
+        local d = saHit - origin
+        if d.Magnitude > 1e-4 then
+            payload.Normal = d.Unit
+        end
+    elseif typeof(payload.Normal) ~= "Vector3" then
+        payload.Normal = Vector3.new(0, 1, 0)
+    end
     local pelletData = payload.PelletData
     if type(pelletData) == "table" then
         for _, pellet in pairs(pelletData) do
@@ -6376,6 +6404,15 @@ function ghApplySaHit(payload, saHit)
                     pellet.LegitPosition = pellet.AimPosition
                 end
                 pellet.AimPosition = saHit
+                if hitPart then
+                    local pHit = pellet.Hit
+                    if pHit == nil or typeof(pHit) == "Instance" then
+                        pellet.Hit = hitPart
+                    end
+                end
+                if typeof(payload.Normal) == "Vector3" then
+                    pellet.Normal = payload.Normal
+                end
             end
         end
     end
@@ -6665,7 +6702,14 @@ function cbmFromAim(origin, weaponRange, hit, targetChar)
 end
 
 function hcRedirectPos()
-    if type(CurrentGame) ~= "table" or CurrentGame.UsesHoodCustoms ~= true then
+    if type(CurrentGame) ~= "table" then
+        return nil
+    end
+    -- HoodCustoms + GunHandler/HoodGame (ZHD, Zee Macro, etc.) all need mouse redirect.
+    if not (CurrentGame.UsesHoodCustoms == true
+        or CurrentGame.UsesGunHandler == true
+        or CurrentGame.HoodGame == true)
+    then
         return nil
     end
     if not (type(shared.rain) == "table" and type(shared.rain.SilentAim) == "table" and shared.rain.SilentAim.Enabled == true) then
@@ -7030,7 +7074,13 @@ function ghSyncMousePos67(hit, origin, maxRange)
 end
 
 function hcSaHit()
-    if type(CurrentGame) ~= "table" or CurrentGame.UsesHoodCustoms ~= true then
+    if type(CurrentGame) ~= "table" then
+        return nil
+    end
+    if not (CurrentGame.UsesHoodCustoms == true
+        or CurrentGame.UsesGunHandler == true
+        or CurrentGame.HoodGame == true)
+    then
         return nil
     end
     local hit = hcRedirectPos()
@@ -7192,6 +7242,9 @@ function patchGhSilentShootGun67(args, argc)
     end
     local hit = hcSaHit()
     if typeof(hit) ~= "Vector3" then
+        hit = rainResolveSaHit()
+    end
+    if typeof(hit) ~= "Vector3" then
         return false
     end
     if not derHoodLockSa67() then
@@ -7203,18 +7256,21 @@ function patchGhSilentShootGun67(args, argc)
     if weaponRange and weaponRange > 10000 then
         weaponRange = nil
     end
+    local resolvedPart = hcResolveHitPart(hit)
     local payload = {
         Shooter = Self and Self.Character,
         Handle = args[2],
         Range = weaponRange,
+        Hit = resolvedPart,
+        AimPosition = hit,
     }
     local pos, inst, norm = ghRay(payload, hit)
     if typeof(pos) ~= "Vector3" then
         return false
     end
-    local resolvedPart = hcResolveHitPart(hit)
     if resolvedPart then
         inst = resolvedPart
+        pos = hit
     end
     norm = norm or Vector3.yAxis
     if ghShootGunUsesPellets67(args) then
@@ -7231,13 +7287,30 @@ function patchGhSilentShootGun67(args, argc)
         end
         return patched
     end
-    if args[4] == nil or typeof(args[4]) ~= "Vector3" then
-        args[5] = pos
-        args[6] = inst
-        args[7] = norm
+    -- Classic ShootGun: origin, hitPos, hitPart, normal
+    if typeof(args[4]) == "Vector3" or args[4] == nil then
+        local n = argc or args.n or #args
+        if typeof(origin) == "Vector3" then
+            local d = hit - origin
+            if d.Magnitude > 1e-4 then
+                args[3] = hit - d.Unit * 0.42
+            end
+        end
+        args[4] = hit
+        if resolvedPart then
+            args[5] = resolvedPart
+        elseif inst ~= nil then
+            args[5] = inst
+        end
+        if n >= 6 or args[6] ~= nil then
+            args[6] = norm
+        end
         return true
     end
-    return false
+    args[5] = pos
+    args[6] = inst
+    args[7] = norm
+    return true
 end
 
 function hcPatchShootGunArgs(args, argc)
@@ -7286,6 +7359,8 @@ function rainPatchShootGunArgs(args, argc)
     if type(magicBulletPatchShootArgs67) == "function" and magicBulletPatchShootArgs67(args, argc) then
         patched = true
     elseif patchShootArgs(args) then
+        patched = true
+    elseif type(patchGhSilentShootGun67) == "function" and patchGhSilentShootGun67(args, argc) then
         patched = true
     elseif type(CurrentGame) == "table" and CurrentGame.UsesHoodCustoms == true then
         patched = hcPatchMainEventArgs(args, argc) == true
@@ -7926,7 +8001,7 @@ Games = {
             end
         }
     },
-    [10765591377] = {
+    [10761345774] = {
         Name = 'Das Hood',
         Updater = 'UpdateMousePos',
         HoodGame = true,
@@ -8087,7 +8162,7 @@ Games = {
             end,
         },
     },
-    [10765699106] = {
+    [10766037366] = {
         Name = "ZHD",
         Updater = "Z33H00DM2U4SEP0S^2",
         HoodGame = true,
@@ -29675,7 +29750,11 @@ refreshSilentAimHit67 = function()
                 remote:FireServer(CurrentGame.Updater, hp)
             end)
         end
-        if (CurrentGame.UsesCorePackage == true or CurrentGame.UsesHoodCustoms == true) and Self and Self.Character then
+        if (CurrentGame.UsesCorePackage == true
+            or CurrentGame.UsesHoodCustoms == true
+            or CurrentGame.UsesGunHandler == true)
+            and Self and Self.Character
+        then
             pcall(function()
                 local mousePos = Self.Character:FindFirstChild("BodyEffects")
                     and Self.Character.BodyEffects:FindFirstChild("MousePos")
@@ -29818,11 +29897,22 @@ do
                         Mango.Locals.SorterActive = false
                         return
                     end
+                    -- Unequip first so Character tools join the reorder.
+                    local humanoid = character:FindFirstChildOfClass("Humanoid")
+                    if humanoid then
+                        pcall(function()
+                            humanoid:UnequipTools()
+                        end)
+                    end
+                    task.wait()
                     local gunOrder = sorterCfg.Order or {}
                     local orderV = 10 - #gunOrder
+                    -- Keep tools under Backpack (not Workspace). Parenting to Workspace
+                    -- stops GunClient LocalScripts; putting them back restarts require()
+                    -- and causes "Cannot require a RobloxScript module..." on ZHD/etc.
                     local fakeFolder = Instance.new("Folder")
                     fakeFolder.Name = "SorterTemp"
-                    fakeFolder.Parent = workspace
+                    fakeFolder.Parent = backpack
                     for _, tool in ipairs(backpack:GetChildren()) do
                         if tool:IsA("Tool") then
                             tool.Parent = fakeFolder
@@ -29859,7 +29949,7 @@ do
                         end
                     end
                     for _, tool in ipairs(backpack:GetChildren()) do
-                        if tool.Name == "" then
+                        if tool:IsA("Tool") and tool.Name == "" and tool.ToolTip == "PlaceHolder" then
                             tool:Destroy()
                         end
                     end
@@ -30753,7 +30843,6 @@ end))
                 local ret = table.pack(oldShoot(...))
                 if not cbmGh67()
                     and typeof(ghSilentAim) == "Vector3"
-                    and typeof(ghLegitVisual) == "Vector3"
                     and type(payload) == "table"
                 then
                     payload.AimPosition = ghSilentAim
@@ -30777,7 +30866,9 @@ end))
                             norm = norm,
                         }
                     end
-                    pcall(twistBeams, payload, ghLegitVisual, beamsBefore)
+                    if typeof(ghLegitVisual) == "Vector3" then
+                        pcall(twistBeams, payload, ghLegitVisual, beamsBefore)
+                    end
                 end
                 if spreadLocalShot and Mango and Mango.Locals then
                     Mango.Locals._RainCbmLegitEnd = nil
