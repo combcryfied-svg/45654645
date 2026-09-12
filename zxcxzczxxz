@@ -1438,7 +1438,17 @@ function norm67()
     end
     agm["Force Hit"] = agm["Force Hit"] == true
     agm["Magic Bullet"] = nil
+    local legacyDmgOver = gm and gm["Damage Overrider"]
+    if type(legacyDmgOver) == "table" and legacyDmgOver.Enabled == true then
+        agm["Damage Overrider"] = true
+    end
     agm["Damage Overrider"] = agm["Damage Overrider"] == true
+    if type(gm) == "table" then
+        gm["Damage Overrider"] = nil
+    end
+    if type(gm) == "table" then
+        gm.Taps = nil
+    end
     agm["Infinite Range"] = agm["Infinite Range"] == true
     agm["Bullet TP"] = nil
     agm["Bullet TP Toggle"] = nil
@@ -2701,38 +2711,7 @@ function getSaPlr()
         return m.LockedTarget or m.SilentAimTarget
     end
     if m.SilentAimTarget and m.SilentAimTarget.Parent then
-        if selectAutomaticOn67() or SP == true or (saFovPassiveOk67() and (saFovWide67() or saMouseInFov67(m.SilentAimTarget))) then
-            return m.SilentAimTarget
-        end
-    end
-    local sa = shared.rain and shared.rain.SilentAim
-    if type(sa) ~= "table" or sa.Enabled ~= true then
-        return nil
-    end
-    if selectEngaged67() and m.LockedTarget and m.LockedTarget.Parent then
-        return m.LockedTarget
-    end
-    if selectAutomaticOn67() or saFovAutoTarget67() then
-        local closest = rainGetClosestPlayerCached67()
-        if closest and closest.Parent then
-            return closest
-        end
-    elseif SP == true then
-        if m.LockedTarget and m.LockedTarget.Parent then
-            return m.LockedTarget
-        end
-        local closest = rainGetClosestPlayerCached67()
-        if closest and closest.Parent then
-            return closest
-        end
-    elseif saFovPassiveOk67() and saMouseInFov67(m.SilentAimTarget) then
-        if m.SilentAimTarget and m.SilentAimTarget.Parent then
-            return m.SilentAimTarget
-        end
-        local closest = rainGetClosestPlayerCached67()
-        if closest and closest.Parent then
-            return closest
-        end
+        return m.SilentAimTarget
     end
     return nil
 end
@@ -2758,6 +2737,7 @@ function espNameHighlight67()
         local saActive = selectAutomaticOn67()
             or selectEngaged67()
             or SP == true
+            or okPlr(m.SilentAimTarget)
         if saActive then
             local saPlr = getSaPlr()
             if okPlr(saPlr) then
@@ -2964,7 +2944,16 @@ function saFovReady67()
 end
 
 function saFov()
-    return saFovReady67()
+    if type(Mango) ~= "table" or type(Mango.Locals) ~= "table" then
+        return false
+    end
+    if saFovWide67() and getSaPlr() then
+        return true
+    end
+    if Mango.Locals.IsBoxFocused == true then
+        return true
+    end
+    return saLocked()
 end
 
 function saActive()
@@ -2975,17 +2964,17 @@ function saActive()
     if not aimPlr then
         return false
     end
-    if not saFovReady67() then
-        return false
-    end
-    if saLocked() then
+    if saIgnoreChecks() then
         return true
     end
     local aimChar = aimPlr.Character
     if aimChar and not passCombatCond(aimChar) then
         return false
     end
-    return true
+    if saFov() then
+        return true
+    end
+    return false
 end
 
 rainCbmLastSaTarget = nil
@@ -4262,7 +4251,6 @@ local DAMAGE_OVERRIDER_BODY67 = {
     ["Right Leg"] = true,
 }
 
--- Resolve character Head from a limb/torso hit instance (nil if already Head / not a body hit).
 function damageOverriderHeadFromHit67(inst)
     if typeof(inst) ~= "Instance" then
         return nil
@@ -4314,8 +4302,6 @@ function damageOverriderSyncMouse67(headPos)
     end
 end
 
--- Force a validated head shot: move origin next to the head (same trick Force Hit uses),
--- then set hit pos/instance to Head so the server accepts and applies head damage.
 function damageOverriderForceHeadArgs67(args, argc, head)
     if type(args) ~= "table" or not head then
         return false
@@ -4416,7 +4402,6 @@ function damageOverriderPatchShootArgs67(args, argc)
     if evt ~= "ShootGun" and evt ~= "Shoot" then
         return false
     end
-    -- Skip when Force Hit already redirected (already a validated head shot).
     if type(magicBulletOn67) == "function" and magicBulletOn67() then
         return false
     end
@@ -4425,6 +4410,387 @@ function damageOverriderPatchShootArgs67(args, argc)
         return false
     end
     return damageOverriderForceHeadArgs67(args, argc, head) == true
+end
+
+function tapsCfg67()
+    return nil
+end
+
+function tapsCount67(toolName)
+    local taps = tapsCfg67()
+    if not taps then
+        return 1
+    end
+    if type(toolName) ~= "string" or toolName == "" then
+        return 1
+    end
+    local count = tonumber(taps[toolName])
+    if not count and toolName:sub(1, 1) == "[" and toolName:sub(-1) == "]" then
+        count = tonumber(taps[toolName:sub(2, -2)])
+    end
+    if not count and toolName:sub(1, 1) ~= "[" then
+        count = tonumber(taps["[" .. toolName .. "]"])
+    end
+    if count then
+        return math.clamp(math.floor(count), 1, 10)
+    end
+    return 1
+end
+
+function rainTapsPayloadFromShootGunArgs67(args)
+    if type(args) ~= "table" or args[1] ~= "ShootGun" then
+        return nil
+    end
+    local n = args.n or #args
+    if n < 3 then
+        return nil
+    end
+    local handle = args[2]
+    if not handle or not handle:IsA("BasePart") then
+        return nil
+    end
+    local tool = handle.Parent
+    if not tool or not tool:IsA("Tool") then
+        return nil
+    end
+    local aimPosition = nil
+    local hit = nil
+    if typeof(args[4]) == "Vector3" then
+        aimPosition = args[4]
+        hit = args[5] or args[7]
+    elseif type(args[4]) == "table" then
+        for _, pellet in ipairs(args[4]) do
+            if type(pellet) == "table" then
+                if typeof(pellet.Result1) == "Vector3" then
+                    aimPosition = pellet.Result1
+                elseif typeof(pellet.AimPosition) == "Vector3" then
+                    aimPosition = pellet.AimPosition
+                end
+                hit = pellet.Result2 or pellet.Hit or pellet.Instance or hit
+            end
+        end
+    end
+    local rawTail = {}
+    for i = 3, n do
+        rawTail[#rawTail + 1] = args[i]
+    end
+    return {
+        Handle = handle,
+        ForcedOrigin = typeof(args[3]) == "Vector3" and args[3] or nil,
+        AimPosition = aimPosition,
+        Hit = hit,
+        RawTail = rawTail,
+    }, tool
+end
+
+function rainTapsBurstGap67(tool)
+    local gap = 0.1
+    if tool and tool:IsA("Tool") then
+        local sc = tool:FindFirstChild("ShootingCooldown")
+        if sc then
+            gap = math.max(gap, tonumber(sc.Value) or gap)
+        end
+    end
+    return math.max(gap * 0.92, 0.08)
+end
+
+function rainTapsConsumeBurst67(tool)
+    if not tool or not tool:IsA("Tool") then
+        return false
+    end
+    if type(Mango) ~= "table" or type(Mango.Locals) ~= "table" then
+        return true
+    end
+    local now = tick()
+    Mango.Locals._RainTapsBurstAt = Mango.Locals._RainTapsBurstAt or {}
+    local last = Mango.Locals._RainTapsBurstAt[tool.Name] or 0
+    if now - last < rainTapsBurstGap67(tool) then
+        return false
+    end
+    Mango.Locals._RainTapsBurstAt[tool.Name] = now
+    return true
+end
+
+function rainGetGhHookedShootFn67()
+    if Mango and type(Mango._RainGhHookedShoot) == "function" then
+        return Mango._RainGhHookedShoot
+    end
+    local gh = Mango and Mango._RainGhModule
+    if type(gh) ~= "table" then
+        local rs = game:GetService("ReplicatedStorage")
+        pcall(function()
+            local mod = rs:FindFirstChild("Modules") and rs.Modules:FindFirstChild("GunHandler")
+            if mod and mod:IsA("ModuleScript") then
+                gh = require(mod)
+                if Mango then
+                    Mango._RainGhModule = gh
+                end
+            end
+        end)
+    end
+    if type(gh) == "table" then
+        local fn = gh.shoot or gh.Shoot
+        if type(fn) == "function" then
+            return fn
+        end
+    end
+    return nil
+end
+
+function rainTapsBuildShootPayload67(tool, char, basePayload)
+    if not tool or not char then
+        return nil
+    end
+    local handle = tool:FindFirstChild("Handle")
+    if not handle or not handle:IsA("BasePart") then
+        return nil
+    end
+    local muzzlePos = rainTapsResolveMuzzle67(tool, handle)
+    if typeof(muzzlePos) ~= "Vector3" then
+        return nil
+    end
+    local tr = tool:FindFirstChild("Range")
+    local tRange = tr and tonumber(tr.Value) or (basePayload and tonumber(basePayload.Range)) or 200
+    if not tRange and tool.GetAttribute then
+        tRange = tonumber(tool:GetAttribute("Range")) or 200
+    end
+    return {
+        Shooter = char,
+        Handle = handle,
+        ForcedOrigin = (basePayload and typeof(basePayload.ForcedOrigin) == "Vector3") and basePayload.ForcedOrigin or muzzlePos,
+        BeamColor = (basePayload and basePayload.BeamColor) or Color3.new(1, 0.545098, 0.14902),
+        Range = tRange,
+    }
+end
+
+function rainTapsUsesInternalMainEvent67()
+    return type(derHoodGunSystemNew67) == "function" and derHoodGunSystemNew67()
+end
+
+function rainTapsDispatchMainEventShootGun67(handle, origin, a0, a1, a2, timeExtra)
+    local remote = type(getRem) == "function" and getRem() or nil
+    if not remote or not handle then
+        return false
+    end
+    local args
+    if timeExtra ~= nil then
+        args = table.pack("ShootGun", handle, origin, a0, a1, a2, timeExtra)
+    else
+        args = table.pack("ShootGun", handle, origin, a0, a1, a2)
+    end
+    local oldFn = Mango and (Mango._RainGhOldFireServer or Mango._RainHcOldFireServer)
+    if typeof(oldFn) ~= "function" then
+        oldFn = remote.FireServer
+    end
+    local ok = pcall(function()
+        rainDispatchFireServer67(oldFn, remote, args)
+    end)
+    return ok
+end
+
+function rainTapsDispatchShootGun67(tool, payload)
+    local remote = type(getRem) == "function" and getRem() or nil
+    if not remote or type(payload) ~= "table" or not payload.Handle then
+        return false
+    end
+    local args = { "ShootGun", payload.Handle }
+    if type(payload.RawTail) == "table" and #payload.RawTail >= 1 then
+        for i = 1, #payload.RawTail do
+            args[#args + 1] = payload.RawTail[i]
+        end
+    elseif typeof(payload.ForcedOrigin) == "Vector3" and typeof(payload.AimPosition) == "Vector3" then
+        args[3] = payload.ForcedOrigin
+        args[4] = payload.AimPosition
+        args[5] = payload.Hit
+    else
+        return false
+    end
+    args.n = #args
+    local oldFn = Mango and (Mango._RainGhOldFireServer or Mango._RainHcOldFireServer)
+    if typeof(oldFn) ~= "function" then
+        oldFn = remote.FireServer
+    end
+    local ok = pcall(function()
+        rainDispatchFireServer67(oldFn, remote, args)
+    end)
+    return ok
+end
+
+function rainTapsResolveMuzzle67(tool, handle)
+    if not tool or not handle then
+        return nil
+    end
+    local d = tool:FindFirstChild("Default")
+    local m = d and d:FindFirstChild("Mesh")
+    m = m and m:FindFirstChild("Muzzle")
+    if m and m:IsA("Attachment") then
+        return m.WorldPosition
+    end
+    local hm = handle:FindFirstChild("Muzzle")
+    if hm and hm:IsA("Attachment") then
+        return hm.WorldPosition
+    end
+    if hm and hm:IsA("BasePart") then
+        return hm.Position
+    end
+    return handle.Position
+end
+
+function rainTapsGunHandlerFireShot67(tool, payload)
+    local lp = Self
+    local char = lp and lp.Character
+    if not char or _G.GUN_COMBAT_TOGGLE then
+        return false
+    end
+    if not tool or not tool:IsA("Tool") or tool.Parent ~= char then
+        tool = char:FindFirstChildWhichIsA("Tool")
+    end
+    if not tool or not tool:IsA("Tool") then
+        return false
+    end
+    local ammo = tool:FindFirstChild("Ammo")
+    if ammo and tonumber(ammo.Value) ~= nil and tonumber(ammo.Value) < 1 then
+        return false
+    end
+    local handle = tool:FindFirstChild("Handle")
+    if not handle or not handle:IsA("BasePart") then
+        return false
+    end
+    local shootFn = rainGetGhHookedShootFn67()
+    if type(shootFn) ~= "function" then
+        return false
+    end
+    if type(derHoodClearFireGates67) == "function" then
+        pcall(derHoodClearFireGates67, tool, char)
+    end
+    if type(zeroGunLastShotUpvalues67) == "function" then
+        pcall(zeroGunLastShotUpvalues67, tool)
+    end
+    if type(derHoodLockSa67) == "function" and derHoodLockSa67() then
+        pcall(syncSaBodyLock67)
+    end
+    local shootPayload = rainTapsBuildShootPayload67(tool, char, payload)
+    if type(shootPayload) ~= "table" then
+        return false
+    end
+    local remote = tool:FindFirstChild("RemoteEvent")
+    local csave = tool:GetAttribute("Cooldown")
+    if type(Mango) == "table" and type(Mango.Locals) == "table" then
+        Mango.Locals._RainAgmTapFiring = true
+    end
+    pcall(function()
+        tool:SetAttribute("Cooldown", nil)
+    end)
+    pcall(function()
+        if remote and remote.FireServer then
+            remote:FireServer("Shoot")
+        end
+    end)
+    local okShoot, a0, a1, a2 = pcall(function()
+        return shootFn(shootPayload)
+    end)
+    local fired = false
+    if okShoot then
+        if rainTapsUsesInternalMainEvent67() then
+            fired = true
+        else
+            fired = rainTapsDispatchMainEventShootGun67(
+                handle,
+                shootPayload.ForcedOrigin,
+                a0,
+                a1,
+                a2
+            ) == true
+        end
+    end
+    pcall(function()
+        if remote and remote.FireServer then
+            remote:FireServer()
+        end
+    end)
+    pcall(function()
+        tool:SetAttribute("Cooldown", csave)
+    end)
+    if type(Mango) == "table" and type(Mango.Locals) == "table" then
+        Mango.Locals._RainAgmTapFiring = false
+    end
+    if type(derHoodClearFireGates67) == "function" then
+        pcall(derHoodClearFireGates67, tool, char)
+    end
+    return fired or okShoot == true
+end
+
+function rainTapsBurstActive67()
+    return type(Mango) == "table"
+        and type(Mango.Locals) == "table"
+        and Mango.Locals._RainTapsBurstActive == true
+end
+
+function rainTapsFireOneExtra67(tool, payload)
+    if not tool or not tool:IsA("Tool") or type(payload) ~= "table" then
+        return false
+    end
+    if type(ghFlow67) == "function" and ghFlow67() then
+        local okGh, fired = pcall(rainTapsGunHandlerFireShot67, tool, payload)
+        if okGh and fired == true then
+            return true
+        end
+    end
+    return rainTapsDispatchShootGun67(tool, payload) == true
+end
+
+function rainTapsFireBurstExtras67(tool, payload)
+    if rainTapsBurstActive67() then
+        return
+    end
+    if not tapsCfg67() or not tool or not tool:IsA("Tool") then
+        return
+    end
+    if not rainTapsConsumeBurst67(tool) then
+        return
+    end
+    local total = tapsCount67(tool.Name)
+    local extra = total - 1
+    if extra < 1 then
+        return
+    end
+    task.spawn(function()
+        if type(Mango) == "table" and type(Mango.Locals) == "table" then
+            Mango.Locals._RainTapsBurstActive = true
+        end
+        local gap = math.clamp(rainTapsBurstGap67(tool) * 0.2, 0.03, 0.07)
+        for i = 1, extra do
+            local char = Self and Self.Character
+            if not char or tool.Parent ~= char then
+                break
+            end
+            local ammo = tool:FindFirstChild("Ammo")
+            if ammo and tonumber(ammo.Value) ~= nil and tonumber(ammo.Value) < 1 then
+                break
+            end
+            rainTapsFireOneExtra67(tool, payload)
+            if i < extra then
+                task.wait(gap)
+            end
+        end
+        if type(Mango) == "table" and type(Mango.Locals) == "table" then
+            Mango.Locals._RainTapsBurstActive = false
+        end
+    end)
+end
+
+function rainTapsOnShootGunFired67(args)
+    if rainTapsBurstActive67() then
+        return
+    end
+    if not tapsCfg67() or type(args) ~= "table" or args[1] ~= "ShootGun" then
+        return
+    end
+    local payload, tool = rainTapsPayloadFromShootGunArgs67(args)
+    if not payload or not tool then
+        return
+    end
+    rainTapsFireBurstExtras67(tool, payload)
 end
 
 function magicBulletTick67()
@@ -4805,6 +5171,9 @@ function delayChangerOn67()
 end
 
 function doubleTapCount67(toolName)
+    if tapsCfg67() then
+        return 1
+    end
     local gm = shared.rain and shared.rain["Gun Mods"]
     local dt = gm and gm["Double Tap"]
     if type(dt) ~= "table" or dt.Enabled ~= true then
@@ -4837,6 +5206,9 @@ function doubleTapCount67(toolName)
 end
 
 function doubleTapActive67(toolName)
+    if tapsCfg67() then
+        return false
+    end
     return doubleTapCount67(toolName) > 1
 end
 
@@ -6127,20 +6499,8 @@ function derHoodGhShootPayload67(tool, char)
         Range = range,
     }
     ghEnsureShootAim67(payload)
-    local aim = payload.AimPosition
-    if typeof(aim) ~= "Vector3" then
+    if typeof(payload.AimPosition) ~= "Vector3" then
         return nil
-    end
-    local pos, inst, norm = ghRay(payload, aim)
-    if typeof(pos) == "Vector3" then
-        payload.AimPosition = pos
-        payload.Hit = inst or workspace
-        payload.Normal = norm or Vector3.new(0, 1, 0)
-    else
-        payload.AimPosition = aim
-        payload.Hit = workspace
-        local dir = aim - origin
-        payload.Normal = dir.Magnitude > 1e-4 and dir.Unit or Vector3.new(0, 1, 0)
     end
     return payload
 end
@@ -6309,6 +6669,32 @@ function rainResolveSaHit()
     return hit
 end
 
+function rainDerHoodSaHit67(origin, range)
+    if not derHoodLockSa67() or not shared.rain.SilentAim.Enabled or not saActive() then
+        return nil
+    end
+    if typeof(origin) ~= "Vector3" or not hcEns() then
+        return nil
+    end
+    local hit = rainResolveSaHit()
+    if typeof(hit) ~= "Vector3" or hit.Magnitude <= 1e-4 then
+        return nil
+    end
+    local aimPlayer = getSaPlr()
+    local targetChar = aimPlayer and aimPlayer.Character
+    hit = silentAimPt(origin, hit, Self and Self.Character, range, targetChar)
+    if typeof(hit) ~= "Vector3" or hit.Magnitude <= 1e-4 then
+        return nil
+    end
+    Mango.Locals.HitPosition = hit
+    local cache = rainSaHitCacheRef67()
+    cache.pos = hit
+    cache.t = os.clock()
+    cache.target = aimPlayer
+    syncSaBodyLock67(true)
+    return hit
+end
+
 function cbmSplit()
     return cbmReady()
 end
@@ -6330,9 +6716,6 @@ function cbmRedir(payload)
 end
 
 function ghSaRedir(payload)
-    if derHoodLockSa67() then
-        return nil
-    end
     if not ghFlow67() then
         return nil
     end
@@ -6368,34 +6751,6 @@ function ghApplySaHit(payload, saHit)
         payload.LegitPosition = payload.AimPosition
     end
     payload.AimPosition = saHit
-    -- GunHandler.Shoot raycasts toward AimPosition unless Hit/AimLockPart is set.
-    -- Without a locked hit part, walls eat the shot and SA looks broken on ZHD/etc.
-    local hitPart = typeof(hcResolveHitPart) == "function" and hcResolveHitPart(saHit) or nil
-    if hitPart then
-        local hitVal = payload.Hit
-        if hitVal == nil or typeof(hitVal) == "Instance" then
-            payload.Hit = hitPart
-        end
-        local lockVal = payload.AimLockPart
-        if lockVal == nil or typeof(lockVal) == "Instance" then
-            payload.AimLockPart = hitPart
-        end
-        if payload.Instance == nil or typeof(payload.Instance) == "Instance" then
-            payload.Instance = hitPart
-        end
-        if payload.HitPart == nil or typeof(payload.HitPart) == "Instance" then
-            payload.HitPart = hitPart
-        end
-    end
-    local origin = typeof(shotOrig) == "function" and shotOrig(payload) or nil
-    if typeof(origin) == "Vector3" then
-        local d = saHit - origin
-        if d.Magnitude > 1e-4 then
-            payload.Normal = d.Unit
-        end
-    elseif typeof(payload.Normal) ~= "Vector3" then
-        payload.Normal = Vector3.new(0, 1, 0)
-    end
     local pelletData = payload.PelletData
     if type(pelletData) == "table" then
         for _, pellet in pairs(pelletData) do
@@ -6404,15 +6759,6 @@ function ghApplySaHit(payload, saHit)
                     pellet.LegitPosition = pellet.AimPosition
                 end
                 pellet.AimPosition = saHit
-                if hitPart then
-                    local pHit = pellet.Hit
-                    if pHit == nil or typeof(pHit) == "Instance" then
-                        pellet.Hit = hitPart
-                    end
-                end
-                if typeof(payload.Normal) == "Vector3" then
-                    pellet.Normal = payload.Normal
-                end
             end
         end
     end
@@ -6631,6 +6977,13 @@ function patchShootArgs(args)
     if type(args) ~= "table" or args[1] ~= "ShootGun" then
         return false
     end
+    if not cbmGh67() then
+        if Mango and Mango.Locals then
+            Mango.Locals._RainGhCbmServerHitQueue = nil
+            Mango.Locals._RainGhCbmServerHit = nil
+        end
+        return false
+    end
     local queue = Mango.Locals._RainGhCbmServerHitQueue
     local single = Mango.Locals._RainGhCbmServerHit
     if type(args[4]) == "table" and type(args[4][1]) == "table" and args[4][1].Result1 ~= nil then
@@ -6661,16 +7014,20 @@ function patchShootArgs(args)
         args[5] = pending.pos
         if pending.inst ~= nil and (args[6] == nil or typeof(args[6]) == "Instance") then
             args[6] = pending.inst
+        elseif pending.inst ~= nil and type(args[6]) == "boolean" then
+            args[6] = true
         end
-        if pending.norm ~= nil and typeof(args[7]) ~= "boolean" then
+        if pending.norm ~= nil and typeof(args[7]) ~= "boolean" and typeof(args[7]) ~= "Instance" then
             args[7] = pending.norm
         end
     elseif typeof(args[4]) == "Vector3" then
         args[4] = pending.pos
         if pending.inst ~= nil and (args[5] == nil or typeof(args[5]) == "Instance") then
             args[5] = pending.inst
+        elseif pending.inst ~= nil and type(args[5]) == "boolean" then
+            args[5] = true
         end
-        if pending.norm ~= nil and typeof(args[6]) ~= "boolean" then
+        if pending.norm ~= nil and typeof(args[6]) ~= "boolean" and typeof(args[6]) ~= "Instance" then
             args[6] = pending.norm
         end
     else
@@ -6713,9 +7070,6 @@ function hcRedirectPos()
         return nil
     end
     if not (type(shared.rain) == "table" and type(shared.rain.SilentAim) == "table" and shared.rain.SilentAim.Enabled == true) then
-        return nil
-    end
-    if not saFovReady67() then
         return nil
     end
     local aimPlayer = getSaPlr()
@@ -6927,7 +7281,7 @@ function ensureSaBodyLock67()
     return lock, rainSaLockPart67
 end
 
-function syncSaBodyLock67()
+function syncSaBodyLock67(force)
     if not derHoodLockSa67() then
         clearSaBodyLock67()
         return false
@@ -6951,7 +7305,8 @@ function syncSaBodyLock67()
         return false
     end
     local now = os.clock()
-    if rainLockLastHit67
+    if not force
+        and rainLockLastHit67
         and typeof(hit) == "Vector3"
         and (hit - rainLockLastHit67).Magnitude < 0.05
         and lock.Value == part
@@ -6967,7 +7322,11 @@ function syncSaBodyLock67()
 end
 
 function ghEnsureShootAim67(payload)
-    if type(payload) ~= "table" or typeof(payload.AimPosition) == "Vector3" then
+    if type(payload) ~= "table" then
+        return
+    end
+    local dhSa = derHoodLockSa67() and shared.rain.SilentAim.Enabled and saActive()
+    if typeof(payload.AimPosition) == "Vector3" and not dhSa then
         return
     end
     local handle = payload.Handle
@@ -6991,31 +7350,14 @@ function ghEnsureShootAim67(payload)
         range = handle.Parent:GetAttribute("Range")
     end
     range = tonumber(range) or 200
-    if derHoodLockSa67() and shared.rain.SilentAim.Enabled and saActive() then
-        syncSaBodyLock67()
-        local hit = Mango.Locals.HitPosition
-        if typeof(hit) ~= "Vector3" or hit.Magnitude <= 1e-4 then
-            hit = rainResolveSaHit()
-        end
-        if typeof(hit) == "Vector3" and hit.Magnitude > 1e-4 then
-            local aimPlayer = getSaPlr()
-            local targetChar = aimPlayer and aimPlayer.Character
-            local aimed = silentAimPt(origin, hit, Self and Self.Character, range, targetChar)
-            if typeof(aimed) == "Vector3" then
-                payload.AimPosition = aimed
-                local pelletData = payload.PelletData
-                if type(pelletData) == "table" then
-                    for _, pellet in pairs(pelletData) do
-                        if type(pellet) == "table" and typeof(pellet.AimPosition) ~= "Vector3" then
-                            pellet.AimPosition = payload.AimPosition
-                        end
-                    end
-                end
-                return
-            end
+    if dhSa then
+        local aimed = rainDerHoodSaHit67(origin, range)
+        if typeof(aimed) == "Vector3" then
+            ghApplySaHit(payload, aimed)
+            return
         end
         if rainSaLockPart67 and rainSaLockPart67.Parent then
-            payload.AimPosition = rainSaLockPart67.Position
+            ghApplySaHit(payload, rainSaLockPart67.Position)
             return
         end
     end
@@ -7083,9 +7425,6 @@ function ghGuaranteeAimPosition67(payload)
 end
 
 function ghSyncMousePos67(hit, origin, maxRange)
-    if derHoodLockSa67() then
-        return syncSaBodyLock67()
-    end
     if not ghFlow67() or not shared.rain.SilentAim.Enabled or not saActive() then
         return false
     end
@@ -7140,13 +7479,7 @@ function ghSyncMousePos67(hit, origin, maxRange)
 end
 
 function hcSaHit()
-    if type(CurrentGame) ~= "table" then
-        return nil
-    end
-    if not (CurrentGame.UsesHoodCustoms == true
-        or CurrentGame.UsesGunHandler == true
-        or CurrentGame.HoodGame == true)
-    then
+    if type(CurrentGame) ~= "table" or CurrentGame.UsesHoodCustoms ~= true then
         return nil
     end
     local hit = hcRedirectPos()
@@ -7363,19 +7696,29 @@ function patchGhSilentShootGun67(args, argc)
             end
         end
         args[4] = hit
-        if resolvedPart then
+        if resolvedPart and (args[5] == nil or typeof(args[5]) == "Instance") then
             args[5] = resolvedPart
-        elseif inst ~= nil then
+        elseif inst ~= nil and (args[5] == nil or typeof(args[5]) == "Instance") then
             args[5] = inst
+        elseif (resolvedPart or inst ~= nil) and type(args[5]) == "boolean" then
+            args[5] = true
         end
-        if n >= 6 or args[6] ~= nil then
+        if (n >= 6 or args[6] ~= nil) and typeof(args[6]) ~= "boolean" and typeof(args[6]) ~= "Instance" then
             args[6] = norm
+        elseif type(args[6]) == "boolean" then
+            args[6] = true
         end
         return true
     end
     args[5] = pos
-    args[6] = inst
-    args[7] = norm
+    if inst ~= nil and (args[6] == nil or typeof(args[6]) == "Instance") then
+        args[6] = inst
+    elseif inst ~= nil and type(args[6]) == "boolean" then
+        args[6] = true
+    end
+    if typeof(args[7]) ~= "boolean" and typeof(args[7]) ~= "Instance" then
+        args[7] = norm
+    end
     return true
 end
 
@@ -7421,26 +7764,32 @@ end
 
 function rainPatchShootGunArgs(args, argc)
     local patched = false
-    -- Force Hit first: direct head redirect + origin shift.
-    if type(magicBulletPatchShootArgs67) == "function" and magicBulletPatchShootArgs67(args, argc) then
-        patched = true
-    elseif patchShootArgs(args) then
-        patched = true
-    elseif type(patchGhSilentShootGun67) == "function" and patchGhSilentShootGun67(args, argc) then
+    if patchShootArgs(args) then
         patched = true
     elseif type(CurrentGame) == "table" and CurrentGame.UsesHoodCustoms == true then
         patched = hcPatchMainEventArgs(args, argc) == true
     else
         patched = hcPatchShootGunArgs(args, argc) == true
     end
-    -- Damage Overrider: limb/torso hits on the same player report as Head (full damage).
-    if type(damageOverriderPatchShootArgs67) == "function" and damageOverriderPatchShootArgs67(args, argc) then
-        patched = true
-    end
     if patched and type(rainTrackShotForHit67) == "function" then
         pcall(rainTrackShotForHit67, args)
     end
     return patched
+end
+
+function rainFireServerWithTaps67(oldFn, self, args)
+    return oldFn(self, table.unpack(args, 1, args.n))
+end
+
+function rainDispatchFireServer67(oldFn, self, args)
+    if type(args) == "table" and args[1] == "ShootGun" then
+        rainPatchShootGunArgs(args, args.n)
+        return rainFireServerWithTaps67(oldFn, self, args)
+    end
+    if rainPatchShootGunArgs(args, args.n) then
+        return oldFn(self, table.unpack(args, 1, args.n))
+    end
+    return oldFn(self, table.unpack(args, 1, args.n))
 end
 
 function rainHookHcMainEvent67()
@@ -7461,9 +7810,7 @@ function rainHookHcMainEvent67()
     oldFireServer = hookfunction(remote.FireServer, LPH_NO_VIRTUALIZE(function(self, ...)
         if self == remote then
             local args = table.pack(...)
-            if rainPatchShootGunArgs(args, args.n) then
-                return oldFireServer(self, table.unpack(args, 1, args.n))
-            end
+            return rainDispatchFireServer67(oldFireServer, self, args)
         end
         return oldFireServer(self, ...)
     end))
@@ -7476,9 +7823,7 @@ function rainHookHcMainEvent67()
         oldUnreli = hookfunction(unreli.FireServer, LPH_NO_VIRTUALIZE(function(self, ...)
             if self == unreli then
                 local args = table.pack(...)
-                if rainPatchShootGunArgs(args, args.n) then
-                    return oldUnreli(self, table.unpack(args, 1, args.n))
-                end
+                return rainDispatchFireServer67(oldUnreli, self, args)
             end
             return oldUnreli(self, ...)
         end))
@@ -7487,7 +7832,33 @@ function rainHookHcMainEvent67()
     end
 end
 
+function rainInstallBoolCastGuard67()
+    if Mango._RainBoolCastGuard67 or typeof(hookmetamethod) ~= "function" then
+        return
+    end
+    pcall(function()
+        local BOOL_PROPS = {
+            IgnoreWater = true,
+            Enabled = true,
+            Visible = true,
+            Locked = true,
+            CanCollide = true,
+            Anchored = true,
+        }
+        local oldNewIndex
+        oldNewIndex = hookmetamethod(Instance, "__newindex", LPH_NO_VIRTUALIZE(function(self, key, value)
+            if typeof(value) == "Instance" and type(key) == "string" and BOOL_PROPS[key] then
+                value = true
+            end
+            return oldNewIndex(self, key, value)
+        end))
+        Mango._RainBoolCastGuard67 = true
+        Mango._RainBoolCastOldNewIndex67 = oldNewIndex
+    end)
+end
+
 function rainHookHcMouse67()
+    pcall(rainInstallBoolCastGuard67)
     if Mango._RainHcMouseHooked then
         return
     end
@@ -7600,28 +7971,6 @@ function rainHookHcMouse67()
             setreadonly(grm, true)
             Mango._RainHcMouseHookKind = "game"
             hooked = true
-        end)
-    end
-    -- Guard: GunClientShotgun assigns Mouse.Target into IgnoreWater/Enabled (bool props).
-    if not Mango._RainBoolCastGuard67 and typeof(hookmetamethod) == "function" then
-        pcall(function()
-            local BOOL_PROPS = {
-                IgnoreWater = true,
-                Enabled = true,
-                Visible = true,
-                Locked = true,
-                CanCollide = true,
-                Anchored = true,
-            }
-            local oldNewIndex
-            oldNewIndex = hookmetamethod(game, "__newindex", LPH_NO_VIRTUALIZE(function(self, key, value)
-                if typeof(value) == "Instance" and type(key) == "string" and BOOL_PROPS[key] then
-                    value = true
-                end
-                return oldNewIndex(self, key, value)
-            end))
-            Mango._RainBoolCastGuard67 = true
-            Mango._RainBoolCastOldNewIndex67 = oldNewIndex
         end)
     end
     if hooked then
@@ -8059,7 +8408,7 @@ Games = {
             end
         }
     },
-    [10761345774] = {
+    [10765931744] = {
         Name = 'Das Hood',
         Updater = 'UpdateMousePos',
         HoodGame = true,
@@ -13275,6 +13624,45 @@ function skins67()
         end
     end
 
+    local function applybat(tool, name)
+        local mesh = nil
+        for _, v in ipairs(tool:GetDescendants()) do
+            if v:IsA("MeshPart") and v.Transparency == 0 then
+                mesh = v
+                break
+            end
+        end
+        if not mesh then
+            return
+        end
+        local skinmodules = replicatedstorage:FindFirstChild("SkinModules")
+        if not skinmodules then
+            return
+        end
+        local batskins = skinmodules:FindFirstChild("Bats")
+        if not batskins then
+            return
+        end
+        local skin = batskins:FindFirstChild(name)
+        if not skin then
+            return
+        end
+        local existing = tool:FindFirstChild("CurrentSkin")
+        if existing then
+            existing:Destroy()
+        end
+        local clone = skin:Clone()
+        clone.Parent = tool
+        clone.CFrame = mesh.CFrame
+        clone.Name = "CurrentSkin"
+        local w = Instance.new("Weld")
+        w.Part0 = clone
+        w.Part1 = mesh
+        w.Parent = clone
+        mesh.Transparency = 1
+        tool:SetAttribute("SkinName", name)
+    end
+
     local function applygun(tool, name)
         local defaultPart = tool:FindFirstChild("Default")
         local orig = (defaultPart and defaultPart:IsA("MeshPart")) and defaultPart or tool:FindFirstChildOfClass("MeshPart")
@@ -13318,7 +13706,9 @@ function skins67()
             local w = Instance.new("Weld")
             w.Part0 = clone
             w.Part1 = orig
-            w.C0 = info.CFrame:Inverse()
+            if info.CFrame then
+                w.C0 = info.CFrame:Inverse()
+            end
             w.Parent = clone
             orig.Transparency = 1
         else
@@ -13527,6 +13917,19 @@ function skins67()
         tool:SetAttribute("CurrentKnifeSkin", skin)
     end
 
+    local function applySkinForTool67(char, tool, skin)
+        if type(skin) ~= "string" or skin == "" or skin == "None" then
+            return
+        end
+        if tool.Name == "[Knife]" then
+            applyknife(char, tool, skin)
+        elseif tool.Name == "[Bat]" then
+            applybat(tool, skin)
+        else
+            applygun(tool, skin)
+        end
+    end
+
     local function setuptool(tool)
         if not tool:IsA("Tool") then return end
         if toolregistry[tool] then return end
@@ -13538,11 +13941,7 @@ function skins67()
             if char ~= localplayer.Character then return end
             local skin = cfg.weapons[tool.Name]
             if not skin or skin == "" then return end
-            if tool.Name == "[Knife]" then
-                applyknife(char, tool, skin)
-            else
-                applygun(tool, skin)
-            end
+            applySkinForTool67(char, tool, skin)
         end))
         trackSkinConn(tool.Unequipped:Connect(function()
             if tool.Name == "[Knife]" then
@@ -13576,15 +13975,9 @@ function skins67()
             if not cfg.enabled then return end
             local skin = cfg.weapons[tool.Name]
             if skin and skin ~= "" then
-                if tool.Name == "[Knife]" then
-                    task.spawn(function()
-                        applyknife(localplayer.Character, tool, skin)
-                    end)
-                else
-                    task.spawn(function()
-                        applygun(tool, skin)
-                    end)
-                end
+                task.spawn(function()
+                    applySkinForTool67(localplayer.Character, tool, skin)
+                end)
             end
         end
     end
@@ -13644,6 +14037,10 @@ function skins67()
                     if t.Name == "[Knife]" then
                         if t:GetAttribute("CurrentKnifeSkin") ~= skinName then
                             applyknife(char, t, skinName)
+                        end
+                    elseif t.Name == "[Bat]" then
+                        if t:GetAttribute("SkinName") ~= skinName then
+                            applybat(t, skinName)
                         end
                     else
                         local handle = t:FindFirstChild("Handle")
@@ -29902,10 +30299,14 @@ refreshSilentAimHit67 = function()
             or (type(CurrentGame) == "table" and CurrentGame.UsesHoodCustoms == true and selectAutomaticOn67())) then
             local now = os.clock()
             local hitCache = rainSaHitCacheRef67()
+            local hitCacheDt = SA_HIT_REFRESH_DT
+            if derHoodLockSa67() then
+                hitCacheDt = 1 / 60
+            end
             if hitCache
                 and hitCache.target == silentAimPlayer
                 and typeof(hitCache.pos) == "Vector3"
-                and (now - hitCache.t) < SA_HIT_REFRESH_DT
+                and (now - hitCache.t) < hitCacheDt
             then
                 Mango.Locals.HitPosition = hitCache.pos
             elseif Player and Player.GetHitPosition then
@@ -30748,6 +31149,7 @@ end))
         if ghHook67 then
             return true
         end
+        pcall(rainInstallBoolCastGuard67)
         if typeof(getgenv) == "function" then
             rstHooks67()
         end
@@ -30778,9 +31180,16 @@ end))
                 if heDir then
                     return heDir, heRange
                 end
-                if derHoodLockSa67() and saActive() then
-                    syncSaBodyLock67()
-                    return oldGetAim(a, b, ...)
+                if derHoodLockSa67() and saActive() and typeof(origin) == "Vector3" then
+                    local dhHit = rainDerHoodSaHit67(origin, rangeArg)
+                    if typeof(dhHit) == "Vector3" then
+                        local d = dhHit - origin
+                        local mag = d.Magnitude
+                        if mag >= 1e-4 then
+                            local cap = rangeArg or mag
+                            return d.Unit, math.min(mag, cap)
+                        end
+                    end
                 end
                 if ghSaWants(origin) then
                     local hit = Mango.Locals.HitPosition
@@ -30835,16 +31244,11 @@ end))
         if type(shootFn) == "function" then
             local oldShoot = shootFn
             local function ghShootWrap(...)
-                local nargs = select("#", ...)
-                local first = nargs >= 1 and select(1, ...) or nil
-                local second = nargs >= 2 and select(2, ...) or nil
+                local shootCallArgs = table.pack(...)
+                local nargs = shootCallArgs.n
+                local first = nargs >= 1 and shootCallArgs[1] or nil
+                local second = nargs >= 2 and shootCallArgs[2] or nil
                 local payload = (type(second) == "table") and second or ((type(first) == "table") and first or nil)
-                if type(payload) == "table" then
-                    if derHoodLockSa67() then
-                        syncSaBodyLock67()
-                    end
-                    ghEnsureShootAim67(payload)
-                end
                 local spreadLocalShot = false
                 local beamsBefore = nil
                 local ghSilentAim = nil
@@ -30877,16 +31281,11 @@ end))
                         Mango.Locals._RainSilentHitRoll = nil
                         hcEns()
                     end
-                    if spreadLocalShot then
-                        local mbHit = type(magicBulletApplyPayload67) == "function" and magicBulletApplyPayload67(payload) or nil
-                        if typeof(mbHit) == "Vector3" then
-                            ghSilentAim = mbHit
-                        elseif not cbmSplit() then
-                            local saHit = ghSaRedir(payload)
-                            if typeof(saHit) == "Vector3" then
-                                ghApplySaHit(payload, saHit)
-                                ghSilentAim = saHit
-                            end
+                    if spreadLocalShot and not cbmSplit() then
+                        local saHit = ghSaRedir(payload)
+                        if typeof(saHit) == "Vector3" then
+                            ghApplySaHit(payload, saHit)
+                            ghSilentAim = saHit
                         end
                     end
                     if spreadLocalShot and cbmRedir(payload) then
@@ -30922,18 +31321,10 @@ end))
                         end
                     end
                 end
-                -- ZHD/GunHandler: Shoot crashes on nil AimPosition (AimPosition - origin).
-                if type(payload) == "table" then
-                    ghGuaranteeAimPosition67(payload)
-                    if typeof(ghSilentAim) == "Vector3" then
-                        pcall(ghSyncMousePos67, ghSilentAim, shotOrig(payload), tonumber(payload.Range))
-                    elseif typeof(payload.AimPosition) == "Vector3" and saActive() then
-                        pcall(ghSyncMousePos67, payload.AimPosition, shotOrig(payload), tonumber(payload.Range))
-                    end
-                end
-                local ret = table.pack(oldShoot(...))
+                local ret = table.pack(oldShoot(table.unpack(shootCallArgs, 1, shootCallArgs.n)))
                 if not cbmGh67()
                     and typeof(ghSilentAim) == "Vector3"
+                    and typeof(ghLegitVisual) == "Vector3"
                     and type(payload) == "table"
                 then
                     payload.AimPosition = ghSilentAim
@@ -30957,9 +31348,7 @@ end))
                             norm = norm,
                         }
                     end
-                    if typeof(ghLegitVisual) == "Vector3" then
-                        pcall(twistBeams, payload, ghLegitVisual, beamsBefore)
-                    end
+                    pcall(twistBeams, payload, ghLegitVisual, beamsBefore)
                 end
                 if spreadLocalShot and Mango and Mango.Locals then
                     Mango.Locals._RainCbmLegitEnd = nil
@@ -30974,6 +31363,8 @@ end))
             end
             gunHandler.Shoot = hookedShoot
             gunHandler.shoot = hookedShoot
+            Mango._RainGhModule = gunHandler
+            Mango._RainGhHookedShoot = hookedShoot
             Mango._RainGhOldShoot = oldShoot
             if typeof(getgenv) == "function" then
                 getgenv()._RainGhShootFn = shootFn
@@ -30991,9 +31382,7 @@ end))
                 oldFireServer = hookfunction(remote.FireServer, LPH_NO_VIRTUALIZE(function(self, ...)
                     if self == remote then
                         local args = table.pack(...)
-                        if rainPatchShootGunArgs(args, args.n) then
-                            return oldFireServer(self, table.unpack(args, 1, args.n))
-                        end
+                        return rainDispatchFireServer67(oldFireServer, self, args)
                     end
                     return oldFireServer(self, ...)
                 end))
@@ -41113,12 +41502,47 @@ do
 		"Golden Age", "Galaxy", "Dragon", "Ice", "Love", "Purple", "Red", "Green", "Blue",
 	}
 
+	local BAT_SKINS = {
+		"Pink Spiked",
+	}
+
+	local TACTICAL_SHOTGUN_SKINS = {
+		"Jungle Blaster", "Shadow", "Danger", "Red Hot", "Halloween23", "Battleworn Purple",
+		"Battleworn Red", "White Stripes", "Inferno", "Sushi", "Hoodmas", "Portal", "Valentine",
+		"Luck", "Premium Yellow", "Beary", "Cloud", "Spooky", "Unicorn", "Red Tiger", "Gold Glory",
+		"Future", "Brainrot", "Icey", "Venom", "Snow Wrap", "Pink Fuchsia", "Electric", "Soul",
+		"GPO-Magma", "Purple Yellow Wrap", "Tact", "Galactic", "Water", "Numbers", "Black & White",
+		"Glassy", "Undead", "Premium Red", "Battleworn Pink", "Blue Wrap", "Void", "Matrix",
+		"Summer", "Galaxy", "Rainbow", "Love", "Red Death", "Jellyfish", "Christmas Wrap",
+		"Military", "Battleworn Orange", "1984", "Patriot", "Battleworn Green", "Biohazard", "Ice",
+	}
+
+	local SMG_SKINS = {
+		"Golden Age", "Galaxy", "Adurite", "Dragon", "Ice", "Love", "Purple", "Red", "Green", "Blue",
+	}
+
+	local WEAPON_SKIN_FALLBACKS = {
+		["[Bat]"] = BAT_SKINS,
+		["[TacticalShotgun]"] = TACTICAL_SHOTGUN_SKINS,
+		["[Shotgun]"] = TACTICAL_SHOTGUN_SKINS,
+		["[Silencer]"] = GUN_SKINS,
+		["[Rifle]"] = GUN_SKINS,
+		["[SMG]"] = SMG_SKINS,
+	}
+
 	local function isKnifeWeaponKey(weaponKey)
 		if type(weaponKey) ~= "string" or weaponKey == "" then
 			return false
 		end
 		local lower = weaponKey:lower()
 		return lower == "[knife]" or lower == "knife"
+	end
+
+	local function isBatWeaponKey(weaponKey)
+		if type(weaponKey) ~= "string" or weaponKey == "" then
+			return false
+		end
+		return weaponKey:lower() == "[bat]"
 	end
 
 	local function isKnifeSkinInstance(child)
@@ -41133,6 +41557,27 @@ do
 		local seen = {}
 		for _, child in ipairs(knivesFolder:GetChildren()) do
 			if isKnifeSkinInstance(child) then
+				local name = child.Name
+				if type(name) == "string" and name ~= "" and not seen[name] then
+					seen[name] = true
+					names[#names + 1] = name
+				end
+			end
+		end
+		if #names == 0 then
+			return nil
+		end
+		return names
+	end
+
+	local function batSkinNamesFromFolder(batsFolder)
+		if not batsFolder then
+			return nil
+		end
+		local names = {}
+		local seen = {}
+		for _, child in ipairs(batsFolder:GetChildren()) do
+			if child:IsA("BasePart") or child:IsA("Model") or child:IsA("Folder") then
 				local name = child.Name
 				if type(name) == "string" and name ~= "" and not seen[name] then
 					seen[name] = true
@@ -41216,7 +41661,14 @@ do
 	end
 
 	local function skinOptionsForWeapon(weaponKey, currentValue)
-		local fallback = isKnifeWeaponKey(weaponKey) and KNIFE_SKINS or GUN_SKINS
+		local fallback = GUN_SKINS
+		if isKnifeWeaponKey(weaponKey) then
+			fallback = KNIFE_SKINS
+		elseif isBatWeaponKey(weaponKey) then
+			fallback = BAT_SKINS
+		elseif WEAPON_SKIN_FALLBACKS[weaponKey] then
+			fallback = WEAPON_SKIN_FALLBACKS[weaponKey]
+		end
 		-- A throw anywhere in this instance walk would drop the whole dropdown, leaving
 		-- the skin unselectable, so every Roblox lookup degrades to the static list.
 		local ok, options = pcall(function()
@@ -41233,6 +41685,10 @@ do
 					names = knifeSkinNamesFromModule(skinModules)
 				end
 				return names
+			end
+
+			if isBatWeaponKey(weaponKey) then
+				return batSkinNamesFromFolder(skinModules:FindFirstChild("Bats"))
 			end
 
 			local modules = requireSkinModules(skinModules)
@@ -41285,7 +41741,7 @@ do
 		"[Revolver]", "[Deagle]", "[Glock]", "[Silencer]",
 		"[Double-Barrel SG]", "[TacticalShotgun]", "[Shotgun]", "[Drum-Shotgun]",
 		"[Rifle]", "[AR]", "[SilencerAR]", "[AK47]", "[AUG]", "[SMG]", "[P90]", "[LMG]", "[DrumGun]",
-		"[Flintlock]", "[GrenadeLauncher]", "[Knife]",
+		"[Flintlock]", "[GrenadeLauncher]", "[Knife]", "[Bat]",
 	}
 
 	local playerAvatarCache = {} -- [userId] = png string | false | "pending"
@@ -41605,6 +42061,16 @@ do
 
 		if parent == "Hitbox Expander" and key == "Size" then
 			spec.min, spec.max, spec.decimals = 1, 50, 0
+			return spec
+		end
+
+		if parent == "Hitbox Expander" and key == "Transparency" then
+			spec.min, spec.max, spec.decimals = 0, 1, 2
+			return spec
+		end
+
+		if parent == "Scaling" and grand == "Hitbox Expander" and (key == "X" or key == "Y" or key == "Z") then
+			spec.min, spec.max, spec.decimals = 1, 30, 0
 			return spec
 		end
 
@@ -42930,7 +43396,7 @@ do
 							},
 						},
 						{ name = "delay changer", side = 2, path = { "Gun Mods", "Delay Changer" } },
-						{ name = "double tap", side = 2, path = { "Gun Mods", "Double Tap" } },
+						{ name = "double tap (legacy)", side = 2, path = { "Gun Mods", "Double Tap" } },
 						{ name = "skin changer", side = 2, path = { "Utilities", "Skin Changer" }, keys = { "Enabled", "Skins" } },
 					},
 				},
