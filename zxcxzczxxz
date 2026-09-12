@@ -8408,6 +8408,29 @@ Games = {
             end
         }
     },
+    [10765456143] = {
+        Name = "Glitch Des Hood",
+        Updater = "Z3eHooDMSOUEPoS233^+",
+        HoodGame = true,
+        UsesGunHandler = true,
+        Functions = {
+            KnockedFunction = function(Player)
+                if Player and Player.Character and Player.Character:FindFirstChild("BodyEffects") then
+                    return Player.Character.BodyEffects["K.O"].Value
+                end
+                return false
+            end,
+            GrabbedFunction = function(Player)
+                if Player and Player.Character then
+                    return Player.Character:FindFirstChild("GRABBING_CONSTRAINT") ~= nil
+                end
+                return false
+            end,
+            RemotePath = function()
+                return game:GetService("ReplicatedStorage").GameRemotes.MainGameEvent
+            end,
+        },
+    },
     [10765931744] = {
         Name = 'Das Hood',
         Updater = 'UpdateMousePos',
@@ -15098,12 +15121,15 @@ local nv = typeof(LPH_NO_VIRTUALIZE) == "function" and LPH_NO_VIRTUALIZE or func
 
 function isDesHoodGame67()
     if game.PlaceId == 100702124803290
+        or game.PlaceId == 10765456143
         or game.GameId == 10763035106
         or game.GameId == 10725680211
-        or game.GameId == 10742768788 then
+        or game.GameId == 10742768788
+        or game.GameId == 10765456143 then
         return true
     end
-    return type(CurrentGame) == "table" and CurrentGame.Name == "Des Hood"
+    return type(CurrentGame) == "table"
+        and (CurrentGame.Name == "Des Hood" or CurrentGame.Name == "Glitch Des Hood")
 end
 
 function desHoodCfg67()
@@ -29675,7 +29701,7 @@ function buyArmor67()
             if CurrentGame.HoodGame == true then
                 return true
             end
-            if CurrentGame.Name == "Des Hood" or CurrentGame.Name == "Da Hood" or CurrentGame.Name == "Das Hood" or CurrentGame.Name == "Zee Macro" or CurrentGame.Name == "ZHD" or CurrentGame.Name == "Der Hood" then
+            if CurrentGame.Name == "Des Hood" or CurrentGame.Name == "Glitch Des Hood" or CurrentGame.Name == "Da Hood" or CurrentGame.Name == "Das Hood" or CurrentGame.Name == "Zee Macro" or CurrentGame.Name == "ZHD" or CurrentGame.Name == "Der Hood" then
                 return true
             end
         end
