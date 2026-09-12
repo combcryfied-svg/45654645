@@ -2098,9 +2098,9 @@ local CLOSEST_PLAYER_CACHE_DT = 1 / 20
 local CLOSEST_PLAYER_IDLE_DT = 1 / 8
 local AUTO_SELECT_SYNC_DT = 1 / 20
 local AUTO_SELECT_IDLE_DT = 1 / 8
-local SA_HIT_REFRESH_DT = 1 / 30
+local SA_HIT_REFRESH_DT = 1 / 15
 local SA_LOCK_SYNC_DT = 1 / 30
-local MOUSE_UPDATER_DT = 1 / 20
+local MOUSE_UPDATER_DT = 1 / 12
 
 function rainSaHitCacheRef67()
     if type(Mango) == "table" then
@@ -6722,19 +6722,25 @@ function hcRedirectPos()
     if not aimPlayer or not aimPlayer.Character then
         return nil
     end
-    local hit = Mango.Locals.HitPosition
-    if Player and Player.GetHitPosition then
-        local ok, live = pcall(Player.GetHitPosition, "Silent")
-        if ok and typeof(live) == "Vector3" and live.Magnitude > 1e-3 then
-            hit = live
-            Mango.Locals.HitPosition = live
-        end
+    -- Use the PreRender cache only. Calling GetHitPosition here freezes the game:
+    -- GunClient / Framework read Mouse.Hit/Target many times per frame, and Best Point
+    -- does GetDescendants + raycast + per-part screen math.
+    local hit = Mango.Locals and Mango.Locals.HitPosition
+    local cache = typeof(rainSaHitCacheRef67) == "function" and rainSaHitCacheRef67() or nil
+    if cache
+        and cache.target == aimPlayer
+        and typeof(cache.pos) == "Vector3"
+        and cache.pos.Magnitude > 1e-4
+    then
+        hit = cache.pos
     end
     if typeof(hit) ~= "Vector3" or hit.Magnitude <= 1e-4 then
         local head = aimPlayer.Character:FindFirstChild("Head")
         if head and head:IsA("BasePart") then
             hit = head.Position
-            Mango.Locals.HitPosition = hit
+            if Mango.Locals then
+                Mango.Locals.HitPosition = hit
+            end
         else
             return nil
         end
@@ -6742,11 +6748,28 @@ function hcRedirectPos()
     return hit
 end
 
+local rainHcMouseFireLast67 = 0
+
 function hcApplyMouseRedirect()
     local hit = hcRedirectPos()
     if typeof(hit) ~= "Vector3" then
         return false
     end
+    local now = os.clock()
+    local dt = tonumber(MOUSE_UPDATER_DT) or (1 / 12)
+    if (now - (rainHcMouseFireLast67 or 0)) < dt then
+        if Self and Self.Character then
+            pcall(function()
+                local mousePos = Self.Character:FindFirstChild("BodyEffects")
+                    and Self.Character.BodyEffects:FindFirstChild("MousePos")
+                if mousePos and mousePos:IsA("Vector3Value") then
+                    mousePos.Value = hit
+                end
+            end)
+        end
+        return true
+    end
+    rainHcMouseFireLast67 = now
     if Self and Self.Character then
         pcall(function()
             local mousePos = Self.Character:FindFirstChild("BodyEffects")
@@ -6763,15 +6786,14 @@ function hcApplyMouseRedirect()
     if not remote then
         return false
     end
-    if CurrentGame.UpdaterList and #CurrentGame.UpdaterList > 0 then
-        for _, testUpdater in ipairs(CurrentGame.UpdaterList) do
-            pcall(function()
-                remote:FireServer(testUpdater, hit)
-            end)
-        end
-    elseif CurrentGame.Updater then
+    if CurrentGame.Updater then
         pcall(function()
             remote:FireServer(CurrentGame.Updater, hit)
+        end)
+    elseif CurrentGame.UpdaterList and #CurrentGame.UpdaterList > 0 then
+        local name = CurrentGame.UpdaterList[1]
+        pcall(function()
+            remote:FireServer(name, hit)
         end)
     end
     return true
@@ -6978,16 +7000,19 @@ function ghEnsureShootAim67(payload)
         if typeof(hit) == "Vector3" and hit.Magnitude > 1e-4 then
             local aimPlayer = getSaPlr()
             local targetChar = aimPlayer and aimPlayer.Character
-            payload.AimPosition = silentAimPt(origin, hit, Self and Self.Character, range, targetChar)
-            local pelletData = payload.PelletData
-            if type(pelletData) == "table" then
-                for _, pellet in pairs(pelletData) do
-                    if type(pellet) == "table" and typeof(pellet.AimPosition) ~= "Vector3" then
-                        pellet.AimPosition = payload.AimPosition
+            local aimed = silentAimPt(origin, hit, Self and Self.Character, range, targetChar)
+            if typeof(aimed) == "Vector3" then
+                payload.AimPosition = aimed
+                local pelletData = payload.PelletData
+                if type(pelletData) == "table" then
+                    for _, pellet in pairs(pelletData) do
+                        if type(pellet) == "table" and typeof(pellet.AimPosition) ~= "Vector3" then
+                            pellet.AimPosition = payload.AimPosition
+                        end
                     end
                 end
+                return
             end
-            return
         end
         if rainSaLockPart67 and rainSaLockPart67.Parent then
             payload.AimPosition = rainSaLockPart67.Position
@@ -7009,10 +7034,51 @@ function ghEnsureShootAim67(payload)
         end
     end
     local mouse = Self and Self:GetMouse()
-    if mouse and typeof(mouse.Hit) == "CFrame" then
-        payload.AimPosition = mouse.Hit.Position
+    if mouse then
+        local okHit, hitCf = pcall(function()
+            return mouse.Hit
+        end)
+        if okHit and typeof(hitCf) == "CFrame" then
+            payload.AimPosition = hitCf.Position
+            return
+        end
+    end
+    local cam = workspace.CurrentCamera
+    if cam then
+        payload.AimPosition = origin + cam.CFrame.LookVector * range
     else
-        payload.AimPosition = origin + workspace.CurrentCamera.CFrame.LookVector * range
+        payload.AimPosition = origin + Vector3.new(0, 0, -range)
+    end
+end
+
+-- GunHandler.Shoot always does (AimPosition - origin).Unit — nil AimPosition hard-crashes.
+function ghGuaranteeAimPosition67(payload)
+    if type(payload) ~= "table" then
+        return
+    end
+    if typeof(payload.AimPosition) == "Vector3" then
+        return
+    end
+    pcall(ghEnsureShootAim67, payload)
+    if typeof(payload.AimPosition) == "Vector3" then
+        return
+    end
+    local origin = typeof(shotOrig) == "function" and shotOrig(payload) or nil
+    if typeof(origin) ~= "Vector3" then
+        local handle = payload.Handle
+        if handle and handle:IsA("BasePart") then
+            origin = handle.Position
+        end
+    end
+    if typeof(origin) ~= "Vector3" then
+        origin = Vector3.new(0, 0, 0)
+    end
+    local range = tonumber(payload.Range) or 200
+    local cam = workspace.CurrentCamera
+    if cam then
+        payload.AimPosition = origin + cam.CFrame.LookVector * range
+    else
+        payload.AimPosition = origin + Vector3.new(0, 0, -range)
     end
 end
 
@@ -7433,7 +7499,6 @@ function rainHookHcMouse67()
     if not Mouse then
         return
     end
-    local reentry = 0
     local function rainSilentAimOn67()
         return type(shared.rain) == "table"
             and type(shared.rain.SilentAim) == "table"
@@ -7450,18 +7515,11 @@ function rainHookHcMouse67()
         if not rainSilentAimOn67() then
             return nil, nil
         end
+        -- Never call GetHitPosition here — Mouse.Hit/Target are read constantly by
+        -- GunClient and would re-run Best Point every access while in FOV.
         local redirect = typeof(hcRedirectPos) == "function" and hcRedirectPos() or nil
         if typeof(redirect) ~= "Vector3" then
             return nil, nil
-        end
-        if reentry > 0 then
-            return redirect, nil
-        end
-        reentry = reentry + 1
-        local ok, pos = pcall(Player.GetHitPosition, "Silent")
-        reentry = reentry - 1
-        if ok and typeof(pos) == "Vector3" and pos.Magnitude > 1e-4 then
-            redirect = pos
         end
         local part = typeof(hcResolveHitPart) == "function" and hcResolveHitPart(redirect) or nil
         return redirect, part
@@ -10519,10 +10577,27 @@ end
                 local mousePos = UserInputService:GetMouseLocation()
                 local sc = math.clamp(math.abs(tonumber(Scale) or 0.6), 0.05, 3)
 
+                -- Prefer direct body parts over full GetDescendants (accessories explode cost).
                 local parts = {}
-                for _, desc in ipairs(Character:GetDescendants()) do
-                    if desc:IsA("BasePart") then
-                        parts[#parts + 1] = desc
+                local seen = {}
+                local function addPart(p)
+                    if p and p:IsA("BasePart") and not seen[p] then
+                        seen[p] = true
+                        parts[#parts + 1] = p
+                    end
+                end
+                for _, name in ipairs({
+                    "Head", "HumanoidRootPart", "Torso", "UpperTorso", "LowerTorso",
+                    "Left Arm", "Right Arm", "Left Leg", "Right Leg",
+                    "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm",
+                    "LeftHand", "RightHand", "LeftUpperLeg", "RightUpperLeg",
+                    "LeftLowerLeg", "RightLowerLeg", "LeftFoot", "RightFoot",
+                }) do
+                    addPart(Character:FindFirstChild(name))
+                end
+                if #parts < 3 then
+                    for _, child in ipairs(Character:GetChildren()) do
+                        addPart(child)
                     end
                 end
 
@@ -29684,8 +29759,8 @@ end
 end)()
 
 do
-local SA_HIT_REFRESH_DT = 1 / 30
-local MOUSE_UPDATER_DT = 1 / 20
+local SA_HIT_REFRESH_DT = 1 / 15
+local MOUSE_UPDATER_DT = 1 / 12
 local rainMouseUpdaterLast67 = 0
 local rainMouseUpdaterLastPos67 = nil
 
@@ -29724,10 +29799,18 @@ refreshSilentAimHit67 = function()
             return
         end
         local now = os.clock()
-        if rainMouseUpdaterLastPos67
-            and (hp - rainMouseUpdaterLastPos67).Magnitude < 0.05
-            and (now - rainMouseUpdaterLast67) < MOUSE_UPDATER_DT
-        then
+        -- Hard time throttle (ignore tiny position deltas — moving targets were
+        -- bypassing the old AND-throttle and FireServer-spamming every frame).
+        if (now - rainMouseUpdaterLast67) < MOUSE_UPDATER_DT then
+            if Self and Self.Character then
+                pcall(function()
+                    local mousePos = Self.Character:FindFirstChild("BodyEffects")
+                        and Self.Character.BodyEffects:FindFirstChild("MousePos")
+                    if mousePos and mousePos:IsA("Vector3Value") then
+                        mousePos.Value = hp
+                    end
+                end)
+            end
             return
         end
         rainMouseUpdaterLastPos67 = hp
@@ -29739,15 +29822,14 @@ refreshSilentAimHit67 = function()
         if not remote then
             return
         end
-        if CurrentGame.UpdaterList and #CurrentGame.UpdaterList > 0 then
-            for _, testUpdater in ipairs(CurrentGame.UpdaterList) do
-                pcall(function()
-                    remote:FireServer(testUpdater, hp)
-                end)
-            end
-        elseif CurrentGame.Updater then
+        if CurrentGame.Updater then
             pcall(function()
                 remote:FireServer(CurrentGame.Updater, hp)
+            end)
+        elseif CurrentGame.UpdaterList and #CurrentGame.UpdaterList > 0 then
+            local name = CurrentGame.UpdaterList[1]
+            pcall(function()
+                remote:FireServer(name, hp)
             end)
         end
         if (CurrentGame.UsesCorePackage == true
@@ -30838,6 +30920,15 @@ end))
                                 end
                             end
                         end
+                    end
+                end
+                -- ZHD/GunHandler: Shoot crashes on nil AimPosition (AimPosition - origin).
+                if type(payload) == "table" then
+                    ghGuaranteeAimPosition67(payload)
+                    if typeof(ghSilentAim) == "Vector3" then
+                        pcall(ghSyncMousePos67, ghSilentAim, shotOrig(payload), tonumber(payload.Range))
+                    elseif typeof(payload.AimPosition) == "Vector3" and saActive() then
+                        pcall(ghSyncMousePos67, payload.AimPosition, shotOrig(payload), tonumber(payload.Range))
                     end
                 end
                 local ret = table.pack(oldShoot(...))
