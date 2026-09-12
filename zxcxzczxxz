@@ -8592,7 +8592,7 @@ Games = {
             end,
         },
     },
-    [10766037366] = {
+    [10765699106] = {
         Name = "ZHD",
         Updater = "Z33H00DM2U4SEP0S^2",
         HoodGame = true,
@@ -17850,7 +17850,11 @@ local function desHoodActionsPoll67()
         ["Apply Armor"] = desHoodApplyArmor67,
         ["Apply Muscle"] = desHoodApplyMuscle67,
         ["Force Reset"] = desHoodForceReset67,
-        ["Kill All"] = desHoodKillAll67,
+        ["Kill All"] = function()
+            if desHoodCfgOn67("Kill All Enabled") then
+                return desHoodKillAll67()
+            end
+        end,
     }
     for key, fn in pairs(handlers) do
         local cur = tonumber(merged[key]) or 0
@@ -17869,7 +17873,7 @@ local function desHoodKillAllInit67()
     killAllHooksInited = true
     trkConn(RunService.Heartbeat:Connect(nv(function()
         desHoodActionsPoll67()
-        if desHoodCfgOn67("Loop Kill All") or desHoodCfgOn67("Kill All Enabled") then
+        if desHoodCfgOn67("Kill All Enabled") and desHoodCfgOn67("Loop Kill All") then
             pcall(desHoodKillAll67)
         end
     end)))
@@ -17878,7 +17882,7 @@ local function desHoodKillAllInit67()
             return
         end
         local dh = desHoodCfg67()
-        if dh and desHoodCfgOn67("Kill All Keybind Enabled") then
+        if dh and desHoodCfgOn67("Kill All Enabled") and desHoodCfgOn67("Kill All Keybind Enabled") then
             local keyStr = dhGet67("Kill All Keybind", "Kill All", "Keybind") or "K"
             local kc = keyCd(keyStr)
             if kc and input.KeyCode == kc then
@@ -17916,12 +17920,12 @@ local function desHoodKillAllInit67()
         end
     end))
     trkConn(Self.CharacterAdded:Connect(function()
-        if not desHoodCfgOn67("Kill All On Respawn") then
+        if not desHoodCfgOn67("Kill All Enabled") or not desHoodCfgOn67("Kill All On Respawn") then
             return
         end
         local respawnConn
         respawnConn = RunService.Heartbeat:Connect(nv(function()
-            if not desHoodCfgOn67("Kill All On Respawn") then
+            if not desHoodCfgOn67("Kill All Enabled") or not desHoodCfgOn67("Kill All On Respawn") then
                 if respawnConn then
                     pcall(function() respawnConn:Disconnect() end)
                 end
