@@ -810,17 +810,18 @@ function norm67()
             end
         end
         for _, key in ipairs({
-            "Rage Bot", "Silent Aim", "TP Bullet", "Stomp", "Auto Stim", "Sentry", "Kill All", "Value Changer",
+            "Rage Bot", "Silent Aim", "Stomp", "Auto Stim", "Sentry", "Kill All",
         }) do
             migrateToGsDh(key)
         end
+        gsDhDes["Inf Range"] = nil
+        gsDhDes["Force Hit"] = nil
+        gsDhDes["Value Changer"] = nil
+        gsDhDes["TP Bullet"] = nil
+        gsDhDes["Hit Exploit"] = nil
         local gmEarly = shared.rain["Gun Mods"]
         if gsDhDes["Inf Ammo"] == nil and type(gmEarly) == "table" and gmEarly["Inf Ammo"] ~= nil then
             gsDhDes["Inf Ammo"] = gmEarly["Inf Ammo"]
-        end
-        local plrEarly = shared.rain.Player
-        if gsDhDes["Value Changer"] == nil and type(plrEarly) == "table" and type(plrEarly["Value Changer"]) == "table" then
-            gsDhDes["Value Changer"] = plrEarly["Value Changer"]
         end
         local legacyRageDh = rageTbl["Des Hood"]
         if type(legacyRageDh) == "table" then
@@ -1091,7 +1092,7 @@ function norm67()
     sa.Prediction = type(sa.Prediction) == "table" and sa.Prediction or {}
     sa.Prediction.Enabled = sa.Prediction.Enabled == true
     for _, axis in ipairs({ "X", "Y", "Z" }) do
-        sa.Prediction[axis] = math.max(0, tonumber(sa.Prediction[axis]) or 0)
+        sa.Prediction[axis] = math.clamp(tonumber(sa.Prediction[axis]) or 0, 0, 0.300)
     end
     local aa = shared.rain["Aim Assist"]
     if type(aa) == "table" then
@@ -1114,6 +1115,14 @@ function norm67()
         if aa.Prediction.Enabled == nil then
             aa.Prediction.Enabled = aa["Use Prediction"] == true
         end
+        aa.Prediction.Enabled = aa.Prediction.Enabled == true
+        for _, axis in ipairs({ "X", "Y", "Z" }) do
+            aa.Prediction[axis] = math.clamp(tonumber(aa.Prediction[axis]) or 0, 0, 0.300)
+        end
+        aa.Shake = type(aa.Shake) == "table" and aa.Shake or {}
+        aa.Shake.Enabled = aa.Shake.Enabled == true
+        aa.Shake.X = math.max(0, tonumber(aa.Shake.X) or 0.35)
+        aa.Shake.Y = math.max(0, tonumber(aa.Shake.Y) or 0.35)
         aa.Smoothing = type(aa.Smoothing) == "table" and aa.Smoothing or {}
         aa.Smoothing.Enabled = aa.Smoothing.Enabled ~= false
         local sm = tonumber(aa.Smoothing.Smoothness) or tonumber(aa.Smoothing.PosLerp)
@@ -1130,7 +1139,7 @@ function norm67()
     end
     local ne = shared.rain["Name ESP"]
     if type(ne) ~= "table" then
-        ne = { Enabled = false, Settings = { ["Color Settings"] = {}, ["Text Size"] = 13 } }
+        ne = { Enabled = true, Settings = { ["Color Settings"] = {}, ["Text Size"] = 13 } }
         shared.rain["Name ESP"] = ne
     end
     ne.Enabled = ne.Enabled == true
@@ -1188,9 +1197,9 @@ function norm67()
         end
         tb.Prediction = type(tb.Prediction) == "table" and tb.Prediction or {}
         tb.Prediction.Enabled = tb.Prediction.Enabled == true
-        tb.Prediction.Threshold = math.max(0, tonumber(tb.Prediction.Threshold) or 0)
+        tb.Prediction.Threshold = math.clamp(tonumber(tb.Prediction.Threshold) or 0, 0, 0.300)
         for _, axis in ipairs({ "X", "Y", "Z" }) do
-            tb.Prediction[axis] = math.max(0, tonumber(tb.Prediction[axis]) or 0)
+            tb.Prediction[axis] = math.clamp(tonumber(tb.Prediction[axis]) or 0, 0, 0.300)
         end
     end
     local panel = shared.rain.Panel
@@ -1490,23 +1499,14 @@ function norm67()
     end
     mergeDhIntoRage("Rage Bot", false)
     mergeDhIntoRage("Silent Aim", true)
-    do
-        -- Rename legacy Hit Exploit → TP Bullet before merge.
-        if type(dhRoot["TP Bullet"]) ~= "table" and type(dhRoot["Hit Exploit"]) == "table" then
-            dhRoot["TP Bullet"] = dhRoot["Hit Exploit"]
-        end
-        dhRoot["Hit Exploit"] = nil
-        if type(rage["TP Bullet"]) ~= "table" and type(rage["Hit Exploit"]) == "table" then
-            rage["TP Bullet"] = rage["Hit Exploit"]
-        end
-        rage["Hit Exploit"] = nil
-    end
-    mergeDhIntoRage("TP Bullet", true)
+    rage["TP Bullet"] = nil
+    rage["Hit Exploit"] = nil
+    dhRoot["TP Bullet"] = nil
+    dhRoot["Hit Exploit"] = nil
     mergeDhIntoRage("Stomp", true)
     mergeDhIntoRage("Auto Stim", true)
     mergeDhIntoRage("Sentry", true)
     mergeDhIntoRage("Kill All", true)
-    mergeDhIntoRage("Value Changer", true)
     if dhRoot["Inf Ammo"] ~= nil and type(gm) == "table" and gm["Inf Ammo"] == nil then
         gm["Inf Ammo"] = dhRoot["Inf Ammo"]
     end
@@ -1553,19 +1553,12 @@ function norm67()
         ["Insta Kill"] = rPick(nil, sa, "Insta Kill", "Woodie Insta Kill", false) == true,
         ["Knock Check"] = rPick(nil, sa, "Knock Check", "Woodie Knock Check", true) ~= false,
         ["Protected Check"] = rPick(nil, sa, "Protected Check", "Woodie Protected Check", true) ~= false,
+        ["Range Modifier"] = rPick(nil, sa, "Range Modifier", nil, true) ~= false,
+        ["Fire Rate"] = rPick(nil, sa, "Fire Rate", nil, true) ~= false,
+        ["Inf Range"] = rPick(nil, sa, "Inf Range", nil, true) ~= false,
     }
-    local he = type(rage["TP Bullet"]) == "table" and rage["TP Bullet"] or {}
-    local heBone = tostring(rPick(nil, he, "Bone", nil, "Head"))
-    if heBone ~= "Torso" and heBone ~= "HumanoidRootPart" then
-        heBone = "Head"
-    end
-    rage["TP Bullet"] = {
-        ["Enabled"] = rPick(nil, he, "Enabled", nil, false) == true,
-        ["Keybind"] = tostring(rPick(nil, he, "Keybind", nil, "F")),
-        ["Lock Keybind"] = tostring(rPick(nil, he, "Lock Keybind", nil, "E")),
-        ["Bone"] = heBone,
-        ["Highlight"] = rPick(nil, he, "Highlight", nil, true) ~= false,
-    }
+    rage["TP Bullet"] = nil
+    rage["Hit Exploit"] = nil
     local voidInput = rPick(nil, vh, "Input", "Void Hide Input", nil)
         or rPick(nil, vh, "Input", "Void Input", "Keyboard")
     local voidKey = rPick(nil, vh, "Keybind", "Void Hide Keybind", nil)
@@ -1613,10 +1606,6 @@ function norm67()
     local dhMisc = type(dhRoot["Misc"]) == "table" and dhRoot["Misc"] or {}
     local dhSentry = type(dhRoot["Sentry"]) == "table" and dhRoot["Sentry"] or type(rage["Sentry"]) == "table" and rage["Sentry"]
     local playerRoot = type(shared.rain.Player) == "table" and shared.rain.Player or {}
-    local dhVC = type(playerRoot["Value Changer"]) == "table" and playerRoot["Value Changer"]
-        or type(rage["Value Changer"]) == "table" and rage["Value Changer"]
-        or type(dhRoot["Value Changer"]) == "table" and dhRoot["Value Changer"]
-        or type(dhRoot["Fun Edits"]) == "table" and dhRoot["Fun Edits"] or {}
     local dhKill = type(dhRoot["Kill All"]) == "table" and dhRoot["Kill All"]
         or type(rage["Kill All"]) == "table" and rage["Kill All"] or {}
     local function dhPick(flat, nestTbl, nestKey, legacy)
@@ -1627,32 +1616,6 @@ function norm67()
             return nestTbl[nestKey]
         end
         return legacy
-    end
-    local function dhAmountSetting(raw, defaultAmount)
-        defaultAmount = tostring(defaultAmount or "9e9")
-        if raw == true then
-            return "9e9"
-        end
-        if raw == false then
-            return "0"
-        end
-        if type(raw) == "number" then
-            return raw == 0 and "0" or tostring(raw)
-        end
-        if type(raw) == "string" then
-            local lower = string.lower(raw)
-            if lower == "true" then
-                return "9e9"
-            end
-            if lower == "false" then
-                return "0"
-            end
-            if raw == "" then
-                return defaultAmount
-            end
-            return raw
-        end
-        return defaultAmount
     end
     local dhInfAmmo = dhPick("Inf Ammo", dhMisc, "Inf Ammo", false) == true
     local dhSentryOn = type(dhSentry) == "table" and dhSentry["Enabled"] == true or dhSentry == true
@@ -1711,13 +1674,6 @@ function norm67()
         ["Mode"] = dhSentryMode,
         ["Player"] = dhSentryPlayer,
     }
-    rage["Value Changer"] = {
-        ["Enabled"] = dhPick("Value Changer Enabled", dhVC, "Enabled", true) == true,
-        ["Armor Value"] = dhAmountSetting(dhPick("Armor Value", dhVC, "Armor Value", "9e9"), "9e9"),
-        ["Muscle Value"] = dhAmountSetting(dhPick("Muscle Value", dhVC, "Muscle Value", "150000"), "150000"),
-        ["Apply Armor Keybind"] = tostring(dhPick("Apply Armor Keybind", dhVC, "Apply Armor Keybind", "")),
-        ["Apply Muscle Keybind"] = tostring(dhPick("Apply Muscle Keybind", dhVC, "Apply Muscle Keybind", "J")),
-    }
     rage["Kill All"] = {
         ["Enabled"] = dhPick("Kill All Enabled", dhKill, "Enabled", false) == true,
         ["Keybind Enabled"] = dhPick("Kill All Keybind Enabled", dhKill, "Keybind Enabled", true) == true,
@@ -1735,17 +1691,20 @@ function norm67()
         rage["Kill All"]["Actions"] = dhKill["Actions"]
     end
     if type(playerRoot) == "table" then
-        playerRoot["Value Changer"] = rage["Value Changer"]
+        playerRoot["Value Changer"] = nil
         shared.rain.Player = playerRoot
     end
+    rage["Value Changer"] = nil
     dhRoot["Rage Bot"] = rage["Rage Bot"]
     dhRoot["Silent Aim"] = rage["Silent Aim"]
-    dhRoot["TP Bullet"] = rage["TP Bullet"]
+    dhRoot["TP Bullet"] = nil
+    dhRoot["Hit Exploit"] = nil
     dhRoot["Stomp"] = rage["Stomp"]
     dhRoot["Auto Stim"] = rage["Auto Stim"]
     dhRoot["Sentry"] = rage["Sentry"]
     dhRoot["Kill All"] = rage["Kill All"]
-    dhRoot["Value Changer"] = rage["Value Changer"]
+    dhRoot["Value Changer"] = nil
+    dhRoot["Fun Edits"] = nil
     dhRoot["Inf Ammo"] = gm["Inf Ammo"]
     dhRoot["Misc"] = nil
     gsNorm["Des Hood"] = dhRoot
@@ -2023,6 +1982,24 @@ function smLerp(smoothness)
     return math.max(0.001, value / 100)
 end
 
+function aaShakeCFrame67()
+    local aa = shared.rain and shared.rain["Aim Assist"]
+    local shake = aa and aa.Shake
+    if type(shake) ~= "table" or shake.Enabled ~= true then
+        return nil
+    end
+    local sx = math.abs(tonumber(shake.X) or 0)
+    local sy = math.abs(tonumber(shake.Y) or 0)
+    if sx <= 0 and sy <= 0 then
+        return nil
+    end
+    return CFrame.Angles(
+        math.rad((math.random() * 2 - 1) * sx),
+        math.rad((math.random() * 2 - 1) * sy),
+        0
+    )
+end
+
 function skinNm(handle)
     if not handle or not handle:IsA("Instance") then
         return nil
@@ -2040,7 +2017,7 @@ function skinNm(handle)
         return sn
     end
     local sc = shared.rain and shared.rain.Utilities and shared.rain.Utilities["Skin Changer"]
-    if sc and sc.Enabled == true and type(sc.Skins) == "table" then
+    if sc and rainEnabled67("Utilities.Skin Changer.Enabled") and type(sc.Skins) == "table" then
         local cfgSkin = sc.Skins[tool.Name]
         if type(cfgSkin) == "string" and cfgSkin ~= "" then
             return cfgSkin
@@ -2108,6 +2085,8 @@ local CLOSEST_PLAYER_CACHE_DT = 1 / 20
 local CLOSEST_PLAYER_IDLE_DT = 1 / 8
 local AUTO_SELECT_SYNC_DT = 1 / 20
 local AUTO_SELECT_IDLE_DT = 1 / 8
+local AUTO_SELECT_LOCKED_DT = 1 / 8
+local AUTO_SELECT_LOCKED_FRAME_DT = 1 / 15
 local SA_HIT_REFRESH_DT = 1 / 15
 local SA_LOCK_SYNC_DT = 1 / 30
 local MOUSE_UPDATER_DT = 1 / 12
@@ -2152,7 +2131,7 @@ function rainGetClosestPlayerCached67(force)
     local now = os.clock()
     local cache = rainClosestCache67
     local cacheDt = CLOSEST_PLAYER_CACHE_DT
-    if selectAutomaticOn67() and not rainCombatHasTarget67() then
+    if selectAutomaticOn67() then
         cacheDt = CLOSEST_PLAYER_IDLE_DT
     end
     if not force and cache.plr and cache.plr.Parent and (now - cache.t) < cacheDt then
@@ -2234,6 +2213,9 @@ function selectEngaged67()
 end
 
 function syncSelectAutomatic67(force)
+    if rageBotManualUntarget67() then
+        return
+    end
     if not selectAutomaticOn67() then
         return
     end
@@ -2249,11 +2231,8 @@ function syncSelectAutomatic67(force)
     local m = Mango.Locals
     local now = os.clock()
     local hasLock = m.LockedTarget and m.LockedTarget.Parent
-    local scanDt = hasLock and AUTO_SELECT_SYNC_DT or AUTO_SELECT_IDLE_DT
+    local scanDt = hasLock and AUTO_SELECT_LOCKED_DT or AUTO_SELECT_IDLE_DT
     if not force and (now - rainAutoSelectLast67) < scanDt then
-        if hasLock then
-            syncSelectAutomaticFlags67(m, m.LockedTarget)
-        end
         return
     end
     rainAutoSelectLast67 = now
@@ -2391,22 +2370,14 @@ function syncKeybindsPanelFromFeatures67()
         dhKb = {}
         dh.Keybinds = dhKb
     end
-    if dhKb["TP Bullet"] == nil and dhKb["Hit Exploit"] ~= nil then
-        dhKb["TP Bullet"] = dhKb["Hit Exploit"]
-    end
-    if dhKb["TP Bullet Lock"] == nil and dhKb["Hit Exploit Lock"] ~= nil then
-        dhKb["TP Bullet Lock"] = dhKb["Hit Exploit Lock"]
-    end
+    dhKb["TP Bullet"] = nil
+    dhKb["TP Bullet Lock"] = nil
     dhKb["Hit Exploit"] = nil
     dhKb["Hit Exploit Lock"] = nil
     local dhKeyNames = {
-        "TP Bullet",
-        "TP Bullet Lock",
         "Kill All",
         "Kill All On Respawn",
         "Kill All Loop",
-        "Apply Armor",
-        "Apply Muscle",
     }
     for i = 1, #dhKeyNames do
         local name = dhKeyNames[i]
@@ -2416,6 +2387,9 @@ function syncKeybindsPanelFromFeatures67()
         kb[name] = nil
     end
     kb["TP Bullet"] = nil
+    kb["TP Bullet Lock"] = nil
+    kb["Hit Exploit"] = nil
+    kb["Hit Exploit Lock"] = nil
     kb["Select"] = tostring(selectKeybind67())
     local aa = r["Aim Assist"]
     kb["Aim Assist"] = tostring(type(aa) == "table" and (aa.Toggle or aa.Keybind) or kb["Aim Assist"] or "Z")
@@ -2432,11 +2406,6 @@ function syncKeybindsPanelFromFeatures67()
         sa.Keybind = kb["Silent Aim"]
     end
     local rage = r.Rage
-    local dhHe = dh["TP Bullet"]
-    local rageHe = type(rage) == "table" and rage["TP Bullet"] or nil
-    local he = type(rageHe) == "table" and rageHe or type(dhHe) == "table" and dhHe or nil
-    dhKb["TP Bullet"] = tostring(he and he["Keybind"] or dhKb["TP Bullet"] or "F")
-    dhKb["TP Bullet Lock"] = tostring(he and he["Lock Keybind"] or dhKb["TP Bullet Lock"] or "E")
     local vh = type(rage) == "table" and rage["Void Hide"] or nil
     kb["Void Hide"] = tostring(vh and vh.Keybind or kb["Void Hide"] or "B")
     local ws = type(r["Speed Modifiers"]) == "table" and r["Speed Modifiers"].WalkSpeed or nil
@@ -2453,9 +2422,8 @@ function syncKeybindsPanelFromFeatures67()
     dhKb["Kill All"] = tostring(type(dhKill) == "table" and dhKill.Keybind or dhKb["Kill All"] or "K")
     dhKb["Kill All On Respawn"] = tostring(type(dhKill) == "table" and dhKill["On Respawn Keybind"] or dhKb["Kill All On Respawn"] or "")
     dhKb["Kill All Loop"] = tostring(type(dhKill) == "table" and dhKill["Loop Keybind"] or dhKb["Kill All Loop"] or "")
-    local dhVc = dh["Value Changer"]
-    dhKb["Apply Armor"] = tostring(type(dhVc) == "table" and dhVc["Apply Armor Keybind"] or dhKb["Apply Armor"] or "")
-    dhKb["Apply Muscle"] = tostring(type(dhVc) == "table" and dhVc["Apply Muscle Keybind"] or dhKb["Apply Muscle"] or "J")
+    dhKb["Apply Armor"] = nil
+    dhKb["Apply Muscle"] = nil
 end
 
 function applyKeybindPanelField67(panelKey, keyName, scope)
@@ -2501,18 +2469,6 @@ function applyKeybindPanelField67(panelKey, keyName, scope)
             end
             return
         end
-        if panelKey == "TP Bullet" or panelKey == "TP Bullet Lock" then
-            local field = panelKey == "TP Bullet Lock" and "Lock Keybind" or "Keybind"
-            local rage = r.Rage
-            if type(rage) == "table" and type(rage["TP Bullet"]) == "table" then
-                rage["TP Bullet"][field] = keyName
-            end
-            local dh = r["Game Specific"]["Des Hood"]
-            if type(dh["TP Bullet"]) == "table" then
-                dh["TP Bullet"][field] = keyName
-            end
-            return
-        end
         if panelKey == "Kill All" or panelKey == "Kill All On Respawn" or panelKey == "Kill All Loop" then
             local field = panelKey == "Kill All" and "Keybind"
                 or panelKey == "Kill All On Respawn" and "On Respawn Keybind"
@@ -2526,12 +2482,6 @@ function applyKeybindPanelField67(panelKey, keyName, scope)
                 rage["Kill All"][field] = keyName
             end
             return
-        end
-        if panelKey == "Apply Armor" or panelKey == "Apply Muscle" then
-            local field = panelKey == "Apply Armor" and "Apply Armor Keybind" or "Apply Muscle Keybind"
-            local dh = r["Game Specific"]["Des Hood"]
-            dh["Value Changer"] = type(dh["Value Changer"]) == "table" and dh["Value Changer"] or {}
-            dh["Value Changer"][field] = keyName
         end
         return
     end
@@ -2675,6 +2625,9 @@ function saIgnoreChecks()
 end
 
 function resolveSaFovPlayer67()
+    if rageBotManualUntarget67() then
+        return nil
+    end
     if type(Mango) ~= "table" or type(Mango.Locals) ~= "table" then
         return nil
     end
@@ -2702,6 +2655,9 @@ function resolveSaFovPlayer67()
 end
 
 function getSaPlr()
+    if rageBotManualUntarget67() then
+        return nil
+    end
     if type(Mango) ~= "table" or type(Mango.Locals) ~= "table" then
         return nil
     end
@@ -2772,25 +2728,12 @@ function espNameHighlight67()
         end
     end
 
-    if type(hitExploitTarget67) == "function" then
-        local hePlr = hitExploitTarget67()
-        if okPlr(hePlr) then
-            return hePlr, true
-        end
-    end
-
-    if okPlr(m.TpBulletLockedTarget) then
-        return m.TpBulletLockedTarget, true
-    end
-
     for _, plr in ipairs({
         m.LockedTarget,
         m.SilentAimTarget,
         m.AimAssistTarget,
         m.CamlockTarget,
         m.TriggerbotTarget,
-        m.HitExploitTarget,
-        m.TpBulletActiveTarget,
     }) do
         if okPlr(plr) then
             return plr, false
@@ -3106,9 +3049,6 @@ function rainNeedsCombatFrame67()
         return true
     end
     if rainEnabled67("Rage.Void Hide.Enabled") then
-        return true
-    end
-    if hitExploitOn67() and hitExploitActive67() then
         return true
     end
     if type(Mango) == "table" and type(Mango.Locals) == "table" then
@@ -3687,7 +3627,11 @@ function rainSyncRuntimeFromConfig67()
         elseif not saOn and not aaOn and not rageBotActive then
             m.LockedTarget = nil
         end
-        if rageBotActive and rageBotTarget then
+        if rageBotManualUntarget67() then
+            m.SilentAimTarget = nil
+            m.LockedTarget = nil
+            SP = false
+        elseif rageBotActive and rageBotTarget then
             m.SilentAimTarget = rageBotTarget
             m.LockedTarget = rageBotTarget
             SP = true
@@ -3848,7 +3792,18 @@ function dasHoodCfg67()
     return type(dh) == "table" and dh or nil
 end
 
+function desHoodInfRangeOn67()
+    return false
+end
+
+function desHoodForceHitOn67()
+    return false
+end
+
 function rainDaHoodInfRangeOn67()
+    if type(desHoodInfRangeOn67) == "function" and desHoodInfRangeOn67() then
+        return true
+    end
     local dh = dasHoodCfg67()
     return dh and dh["Inf Range"] == true
 end
@@ -3860,6 +3815,9 @@ function rainDaHoodWallbangOn67()
 end
 
 function magicBulletOn67()
+    if type(desHoodForceHitOn67) == "function" and desHoodForceHitOn67() then
+        return true
+    end
     local gm = shared.rain and shared.rain["Gun Mods"]
     local agm = gm and gm["Advanced Gun Mods"]
     if type(agm) ~= "table" then
@@ -3877,6 +3835,26 @@ function magicBulletTarget67()
         return nil
     end
     local m = Mango.Locals
+    local function validMagicPlr(plr)
+        if not plr or not plr.Parent or plr == Self then
+            return nil
+        end
+        local char = plr.Character
+        if not char then
+            return nil
+        end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then
+            return nil
+        end
+        return plr
+    end
+    if type(desHoodForceHitOn67) == "function" and desHoodForceHitOn67() then
+        return validMagicPlr(type(rageBotSilentTarget67) == "function" and rageBotSilentTarget67())
+            or validMagicPlr(m.SilentAimTarget)
+            or validMagicPlr(m.LockedTarget)
+            or validMagicPlr(m.AimAssistTarget)
+    end
     local plr = m.LockedTarget
     if not plr or not plr.Parent or plr == Self then
         return nil
@@ -3889,15 +3867,7 @@ function magicBulletTarget67()
     if not hasSelectLock then
         return nil
     end
-    local char = plr.Character
-    if not char then
-        return nil
-    end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum or hum.Health <= 0 then
-        return nil
-    end
-    return plr
+    return validMagicPlr(plr)
 end
 
 function magicBulletHead67(plr)
@@ -5750,268 +5720,36 @@ end
 
 VOID_Y_THRESHOLD67 = 1e9
 
-local HIT_EXPLOIT_BONE_MAP67 = {
-    Head = { "Head" },
-    Torso = { "UpperTorso", "LowerTorso", "Torso" },
-    HumanoidRootPart = { "HumanoidRootPart" },
-}
-
-function hitExploitCfg67()
-    local rage = shared.rain and shared.rain.Rage
-    if type(rage) ~= "table" then
-        return nil
-    end
-    return rage["TP Bullet"] or rage["Hit Exploit"]
-end
-
-function hitExploitGhGame67()
-    return type(CurrentGame) == "table" and CurrentGame.UsesGunHandler == true
-end
 
 function hitExploitOn67()
-    return hitExploitGhGame67() and rainEnabled67("Rage.TP Bullet.Enabled") == true
+    return false
 end
 
 function hitExploitActive67()
-    local ml = Mango and Mango.Locals
-    return ml and ml.HitExploitActive == true
-end
-
-function hitExploitUnifiedTarget67()
-    if type(Mango) ~= "table" or type(Mango.Locals) ~= "table" then
-        return nil
-    end
-    local m = Mango.Locals
-    if type(syncTgt) == "function" and hitExploitOn67() and hitExploitActive67() then
-        pcall(syncTgt)
-    end
-    if type(stickyPlr) == "function" and stickyPlr(m.LockedTarget) then
-        return m.LockedTarget
-    end
-    if type(getSaPlr) == "function" then
-        local plr = getSaPlr()
-        if type(stickyPlr) == "function" and stickyPlr(plr) then
-            return plr
-        end
-    end
-    for _, plr in ipairs({
-        m.SilentAimTarget,
-        m.AimAssistTarget,
-        m.TriggerbotTarget,
-        m.CamlockTarget,
-        m.HitExploitTarget,
-    }) do
-        if type(stickyPlr) == "function" and stickyPlr(plr) then
-            return plr
-        end
-    end
-    return nil
+    return false
 end
 
 function hitExploitTarget67()
-    if not hitExploitOn67() or not hitExploitActive67() then
-        return nil
-    end
-    local plr = hitExploitUnifiedTarget67()
-    if not plr or not plr.Parent then
-        return nil
-    end
-    if type(saLocked) == "function" and saLocked() and Mango.Locals.LockedTarget == plr then
-        return plr
-    end
-    if Mango.Locals.LockedTarget == plr and type(stickyPlr) == "function" and stickyPlr(plr) then
-        return plr
-    end
-    local char = plr.Character
-    if char then
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if hum and hum.Health > 0 then
-            return plr
-        end
-    end
     return nil
 end
 
-function hitExploitSyncCombat67(locked)
-    if not locked or type(lockTgt) ~= "function" then
-        return false
-    end
-    lockTgt(locked)
-    local sa = shared.rain and shared.rain.SilentAim
-    local aa = shared.rain and shared.rain["Aim Assist"]
-    local tb = shared.rain and shared.rain.TriggerBot
-    if type(sa) == "table" and sa.Enabled == true then
-        SP = true
-    end
-    if type(aa) == "table" and aa.Enabled == true and aa.Sticky == true then
-        SP2 = true
-    end
-    if type(tb) == "table" and tb.Enabled == true and type(Mango) == "table" and type(Mango.Locals) == "table" then
-        Mango.Locals.TriggerState = true
-    end
-    if type(syncTgt) == "function" then
-        pcall(syncTgt)
-    end
-    return true
+function hitExploitTpActive67()
+    return false
 end
 
-function hitExploitPickTarget67()
-    if type(Player) == "table" and type(Player.GetClosestPlayerToCursor) == "function" then
-        return Player.GetClosestPlayerToCursor()
-    end
-    return nil
+function hitExploitPatchShoot67()
 end
 
-function hitExploitBone67()
-    local cfg = hitExploitCfg67()
-    local bone = cfg and cfg["Bone"] or "Head"
-    if bone ~= "Torso" and bone ~= "HumanoidRootPart" then
-        bone = "Head"
-    end
-    return bone
+function tpShoot67()
 end
 
-function hitExploitHighlightOn67()
-    local cfg = hitExploitCfg67()
-    return cfg and cfg["Highlight"] ~= false
+function hitExploitPatchShootGunArgs67()
+    return false
 end
 
-function hitExploitKeybind67()
-    local cfg = hitExploitCfg67()
-    return tostring(cfg and cfg["Keybind"] or "F")
+function hitExploitInit67()
 end
 
-function hitExploitLockKeybind67()
-    local cfg = hitExploitCfg67()
-    return tostring(cfg and cfg["Lock Keybind"] or "E")
-end
-
-function hitExploitGetPart67(char)
-    if not char then
-        return nil
-    end
-    local names = HIT_EXPLOIT_BONE_MAP67[hitExploitBone67()] or HIT_EXPLOIT_BONE_MAP67.Head
-    for i = 1, #names do
-        local part = char:FindFirstChild(names[i])
-        if part and part:IsA("BasePart") then
-            return part
-        end
-    end
-    return char:FindFirstChild("HumanoidRootPart")
-end
-
-function hitExploitGetAimDir67(origin, rangeArg)
-    if not hitExploitOn67() or not hitExploitActive67() then
-        return nil
-    end
-    if typeof(origin) ~= "Vector3" then
-        return nil
-    end
-    local plr = hitExploitTarget67()
-    if not plr then
-        return nil
-    end
-    local part = hitExploitGetPart67(plr.Character)
-    if not part then
-        return nil
-    end
-    local dir = part.Position - origin
-    local mag = dir.Magnitude
-    if mag < 0.001 then
-        return nil
-    end
-    local cap = rangeArg or mag
-    return dir.Unit, math.min(mag, cap)
-end
-
-function hitExploitPatchShoot67(payload)
-    if type(payload) ~= "table" or typeof(payload.ForcedOrigin) ~= "Vector3" then
-        return
-    end
-    local plr = hitExploitTarget67()
-    if not plr then
-        return
-    end
-    local part = hitExploitGetPart67(plr.Character)
-    if not part then
-        return
-    end
-    local targetPos = part.Position
-    local origin = payload.ForcedOrigin
-    local dir = targetPos - origin
-    dir = dir.Magnitude > 0.001 and dir.Unit or Vector3.new(0, 0, -1)
-    local spoofedOrigin = targetPos - dir * 1.5
-    payload.ForcedOrigin = spoofedOrigin
-    payload.Hit = part
-    payload.AimPosition = targetPos
-    payload.Normal = -dir
-    if typeof(payload.Range) == "number" then
-        payload.Range = math.huge
-    end
-    local handle = payload.Handle
-    if typeof(handle) == "Instance" and handle:IsA("BasePart") then
-        local moved = {}
-        for _, att in ipairs(handle:GetChildren()) do
-            if att:IsA("Attachment") then
-                moved[#moved + 1] = { att = att, cf = att.CFrame }
-                att.WorldCFrame = CFrame.new(spoofedOrigin, targetPos)
-            end
-        end
-        if #moved > 0 then
-            task.delay(0.15, function()
-                for i = 1, #moved do
-                    pcall(function()
-                        moved[i].att.CFrame = moved[i].cf
-                    end)
-                end
-            end)
-        end
-    end
-end
-
-function hitExploitFlipToggle67()
-    if not hitExploitOn67() then
-        return false
-    end
-    local ml = Mango and Mango.Locals
-    if type(ml) ~= "table" then
-        return false
-    end
-    ml.HitExploitActive = not (ml.HitExploitActive == true)
-    if ml.HitExploitActive then
-        if not hitExploitUnifiedTarget67() then
-            local locked = hitExploitPickTarget67()
-            if locked then
-                hitExploitSyncCombat67(locked)
-            end
-        else
-            pcall(syncTgt)
-        end
-    end
-    if typeof(getgenv) == "function" and type(getgenv()._RainHitExploitSyncHighlight67) == "function" then
-        pcall(getgenv()._RainHitExploitSyncHighlight67)
-    end
-    return ml.HitExploitActive == true
-end
-
-function hitExploitLockTarget67()
-    if not hitExploitOn67() then
-        return nil
-    end
-    local ml = Mango and Mango.Locals
-    if type(ml) ~= "table" then
-        return nil
-    end
-    local locked = hitExploitPickTarget67()
-    if not locked then
-        return nil
-    end
-    hitExploitSyncCombat67(locked)
-    if typeof(getgenv) == "function" and type(getgenv()._RainHitExploitSyncHighlight67) == "function" then
-        pcall(getgenv()._RainHitExploitSyncHighlight67)
-    end
-    return locked
-end
 
 function rageVoidActive67()
     local ml = Mango and Mango.Locals
@@ -7764,12 +7502,27 @@ end
 
 function rainPatchShootGunArgs(args, argc)
     local patched = false
-    if patchShootArgs(args) then
+    if hitExploitPatchShootGunArgs67(args, argc) then
         patched = true
-    elseif type(CurrentGame) == "table" and CurrentGame.UsesHoodCustoms == true then
-        patched = hcPatchMainEventArgs(args, argc) == true
-    else
-        patched = hcPatchShootGunArgs(args, argc) == true
+    end
+    if type(magicBulletPatchShootArgs67) == "function" and magicBulletOn67() then
+        if magicBulletPatchShootArgs67(args, argc) then
+            patched = true
+        end
+    end
+    if type(desHoodInfRangePatchShootGun67) == "function" and desHoodInfRangeOn67() then
+        if desHoodInfRangePatchShootGun67(args, argc) then
+            patched = true
+        end
+    end
+    if not patched then
+        if patchShootArgs(args) then
+            patched = true
+        elseif type(CurrentGame) == "table" and CurrentGame.UsesHoodCustoms == true then
+            patched = hcPatchMainEventArgs(args, argc) == true
+        elseif not hitExploitTpActive67() then
+            patched = hcPatchShootGunArgs(args, argc) == true
+        end
     end
     if patched and type(rainTrackShotForHit67) == "function" then
         pcall(rainTrackShotForHit67, args)
@@ -7846,9 +7599,13 @@ function rainInstallBoolCastGuard67()
             Anchored = true,
         }
         local oldNewIndex
-        oldNewIndex = hookmetamethod(Instance, "__newindex", LPH_NO_VIRTUALIZE(function(self, key, value)
-            if typeof(value) == "Instance" and type(key) == "string" and BOOL_PROPS[key] then
-                value = true
+        oldNewIndex = hookmetamethod(game, "__newindex", LPH_NO_VIRTUALIZE(function(self, key, value)
+            if typeof(value) == "Instance" then
+                if key == "Value" and typeof(self) == "Instance" and self:IsA("BoolValue") then
+                    value = true
+                elseif type(key) == "string" and BOOL_PROPS[key] then
+                    value = true
+                end
             end
             return oldNewIndex(self, key, value)
         end))
@@ -7875,52 +7632,30 @@ function rainHookHcMouse67()
             and type(shared.rain.SilentAim) == "table"
             and shared.rain.SilentAim.Enabled == true
     end
-    -- Resolve head redirect for Force Hit / silent aim (Hit CFrame + Target part).
-    local function hcMouseAim67()
-        if type(magicBulletOn67) == "function" and magicBulletOn67() then
-            local _, headPos, headPart = magicBulletResolve67()
-            if typeof(headPos) == "Vector3" then
-                return headPos, headPart
-            end
-        end
-        if not rainSilentAimOn67() then
-            return nil, nil
-        end
-        -- Never call GetHitPosition here — Mouse.Hit/Target are read constantly by
-        -- GunClient and would re-run Best Point every access while in FOV.
-        local redirect = typeof(hcRedirectPos) == "function" and hcRedirectPos() or nil
-        if typeof(redirect) ~= "Vector3" then
-            return nil, nil
-        end
-        local part = typeof(hcResolveHitPart) == "function" and hcResolveHitPart(redirect) or nil
-        return redirect, part
-    end
     local function hcMouseResolve(self, key, oldIndex)
         if self ~= Mouse or type(key) ~= "string" then
             return oldIndex(self, key)
         end
-        -- GunClientShotgun / Revolver GunClient sometimes do IgnoreWater/Enabled = Mouse.Target.
-        -- We still redirect Target for Force Hit (needed for hits), and a separate
-        -- __newindex guard coerces Instance→bool on those properties.
-        if key ~= "Hit" and key ~= "Target" then
+        -- Only redirect Hit (CFrame). Never rewrite Target — GunClientShotgun /
+        -- Revolver GunClient feed Mouse.Target into bool slots and error with
+        -- "Unable to cast Instance to bool".
+        if key ~= "Hit" then
             return oldIndex(self, key)
         end
-        local headPos, headPart = hcMouseAim67()
-        if key == "Hit" then
+        if type(magicBulletOn67) == "function" and magicBulletOn67() then
+            local _, headPos = magicBulletResolve67()
             if typeof(headPos) == "Vector3" then
                 return CFrame.new(headPos)
             end
+        end
+        if not rainSilentAimOn67() then
             return oldIndex(self, key)
         end
-        -- Target
-        if typeof(headPart) == "Instance" then
-            return headPart
-        end
-        if typeof(headPos) == "Vector3" and typeof(hcResolveHitPart) == "function" then
-            local part = hcResolveHitPart(headPos)
-            if part then
-                return part
-            end
+        -- Never call GetHitPosition here — Mouse.Hit is read constantly by
+        -- GunClient and would re-run Best Point every access while in FOV.
+        local redirect = typeof(hcRedirectPos) == "function" and hcRedirectPos() or nil
+        if typeof(redirect) == "Vector3" then
+            return CFrame.new(redirect)
         end
         return oldIndex(self, key)
     end
@@ -7963,7 +7698,7 @@ function rainHookHcMouse67()
             local oldGameIndex = grm.__index
             setreadonly(grm, false)
             grm.__index = LPH_NO_VIRTUALIZE(function(self, key)
-                if self == Mouse and (key == "Hit" or key == "Target") then
+                if self == Mouse and key == "Hit" then
                     return hcMouseResolve(self, key, oldGameIndex)
                 end
                 return oldGameIndex(self, key)
@@ -10601,19 +10336,6 @@ end
                         end
                     end
                 end
-                if best == math.huge then
-                    for _, part in ipairs(character:GetDescendants()) do
-                        if part:IsA("BasePart") then
-                            local pos, onScreen = camera:WorldToViewportPoint(part.Position)
-                            if onScreen and pos.Z > 0 then
-                                local dist = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
-                                if dist < best then
-                                    best = dist
-                                end
-                            end
-                        end
-                    end
-                end
                 return best == math.huge and nil or best
             end
 
@@ -11182,7 +10904,10 @@ end
                     end
                     if handle and shootBBGUI then
                         local humanoidRootPart = TargetPlayerData.Character.HumanoidRootPart
-                        local Velocity = IsDesynced(humanoidRootPart) and Resolve(humanoidRootPart) or humanoidRootPart.Velocity
+                        local Velocity = humanoidRootPart.Velocity
+                        if typeof(IsDesynced) == "function" and typeof(Resolve) == "function" and IsDesynced(humanoidRootPart) then
+                            Velocity = Resolve(humanoidRootPart)
+                        end
                         local handlePosition = handle.Position
                         local origin = handlePosition + handle.CFrame:VectorToWorldSpace(shootBBGUI.StudsOffsetWorldSpace)
 
@@ -11289,10 +11014,35 @@ end
                 )
             end
 
+            local function applyAimAssistPrediction(targetPos, char, targetPlr)
+                if typeof(targetPos) ~= "Vector3" then
+                    return targetPos
+                end
+                local aaCfg = shared.rain["Aim Assist"]
+                local pred = aaCfg and aaCfg.Prediction
+                if type(pred) ~= "table" or pred.Enabled ~= true then
+                    return targetPos
+                end
+                local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart)
+                if not root then
+                    return targetPos
+                end
+                local vel = silentPredVelocity(root, targetPlr)
+                return targetPos + Vector3.new(
+                    vel.X * (tonumber(pred.X) or 0),
+                    vel.Y * (tonumber(pred.Y) or 0),
+                    vel.Z * (tonumber(pred.Z) or 0)
+                )
+            end
+
             local function GetHitPosition(Mode)
     if Mode == 'Assist' then
         local aaCfg = shared.rain['Aim Assist']
-        local char = Mango.Locals.AimAssistTarget.Character
+        local tgt = Mango.Locals.AimAssistTarget
+        if not tgt or not tgt.Parent or not tgt.Character then
+            return nil
+        end
+        local char = tgt.Character
         local aimPoint = migrateHitPartMode(aaCfg.Point or "Closest Part")
         local NearestPart = GetClosestPartToCursor(char)
         local TargetPosition
@@ -11329,21 +11079,7 @@ end
             return nil
         end
 
-        local Hit
-        local pred = type(aaCfg.Prediction) == "table" and aaCfg.Prediction or {}
-        if pred.Enabled then
-            local RootPart = Mango.Locals.AimAssistTarget.Character.HumanoidRootPart
-            local Velocity = IsDesynced(RootPart) and Resolve(RootPart) or RootPart.Velocity
-            Hit = TargetPosition + Vector3.new(
-                Velocity.X * (tonumber(pred.X) or 0),
-                Velocity.Y * (tonumber(pred.Y) or 0),
-                Velocity.Z * (tonumber(pred.Z) or 0)
-            )
-        else
-            Hit = TargetPosition
-        end
-
-        return Hit
+        return applyAimAssistPrediction(TargetPosition, char, tgt)
     end
 
     if Mode == 'Silent' then
@@ -12242,6 +11978,18 @@ end
                     Mango.Locals.IsBoxFocused = false
                     return
                 end
+                if rageBotManualUntarget67() then
+                    setBoxFovVisible(false)
+                    destroySilent3DFov()
+                    hideSilent3DFov()
+                    Mango.Visuals.Silent3DTargetChar = nil
+                    Mango.Locals.IsBoxFocused = false
+                    Mango.Locals.SilentAimTarget = nil
+                    if not saLocked() then
+                        Mango.Locals.LockedTarget = nil
+                    end
+                    return
+                end
                 local aimPlayer = resolveSaFovPlayer67()
                 if not aimPlayer then
                     setBoxFovVisible(false)
@@ -13121,7 +12869,7 @@ function TriggerBot()
         targetPlayer = Mango.Locals.LockedTarget
         targetHRP = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
     elseif selectAutomaticOn67() then
-        local closest = Player.GetClosestPlayerToCursor()
+        local closest = type(rainGetClosestPlayerCached67) == "function" and rainGetClosestPlayerCached67() or nil
         if closest and closest.Character then
             targetPlayer = closest
             targetHRP = closest.Character:FindFirstChild("HumanoidRootPart")
@@ -13347,7 +13095,12 @@ end
                     rota = math.clamp(rota, 0.001, 1)
                     local lerpedPos = camcf.Position:Lerp(desiredcf.Position, posa)
                     local lerpedRot = camcf:Lerp(desiredcf, rota)
-                    Camera.CFrame = CFrame.new(lerpedPos) * (lerpedRot - lerpedRot.Position)
+                    local finalCf = CFrame.new(lerpedPos) * (lerpedRot - lerpedRot.Position)
+                    local shakeCf = aaShakeCFrame67()
+                    if shakeCf then
+                        finalCf = finalCf * shakeCf
+                    end
+                    Camera.CFrame = finalCf
                 end
             end
 
@@ -13550,9 +13303,6 @@ function lockTgt(locked)
     Mango.Locals.TriggerbotTarget = locked
     Mango.Locals.CamlockTarget = locked
     Mango.Locals.AimAssistTarget = locked
-    Mango.Locals.TpBulletActiveTarget = locked
-    Mango.Locals.TpBulletLockedTarget = locked
-    Mango.Locals.HitExploitTarget = locked
 end
 
 function clrLock()
@@ -13562,10 +13312,6 @@ function clrLock()
     Mango.Locals.TriggerbotTarget = nil
     Mango.Locals.CamlockTarget = nil
     Mango.Locals.AimAssistTarget = nil
-    Mango.Locals.TpBulletActiveTarget = nil
-    Mango.Locals.TpBulletLockedTarget = nil
-    Mango.Locals.HitExploitTarget = nil
-    Mango.Locals.TpBulletVisualPlayer = nil
     Mango.Locals.HitTrigger = nil
     Mango.Locals.HitPosition = nil
 end
@@ -13587,8 +13333,15 @@ function skins67()
         if type(sc) ~= "table" then
             return { enabled = false, weapons = {} }
         end
+        local menuEnabled = rainMenuFlagValue67("Utilities.Skin Changer.Enabled")
+        local enabled = menuEnabled
+        if enabled == nil then
+            enabled = sc.Enabled == true
+        else
+            enabled = enabled == true
+        end
         return {
-            enabled = rainEnabled67("Utilities.Skin Changer.Enabled"),
+            enabled = enabled == true,
             weapons = type(sc.Skins) == "table" and sc.Skins or {},
         }
     end
@@ -13614,7 +13367,86 @@ function skins67()
         ["[AK47]"] = { "AK47" },
         ["[SilencerAR]"] = { "SilencerAR", "Silencer AR" },
         ["[DrumGun]"] = { "DrumGun", "Drum Gun" },
+        ["[Deagle]"] = { "Deagle" },
+        ["[Flintlock]"] = { "Flintlock" },
     }
+
+    local function gunDefaultAnchor67(tool)
+        local default = tool:FindFirstChild("Default")
+        if default then
+            if default:IsA("MeshPart") then
+                return default, default
+            end
+            local mesh = default:FindFirstChild("Mesh")
+            if mesh and mesh:IsA("MeshPart") then
+                return default, mesh
+            end
+            local inner = default:FindFirstChildWhichIsA("MeshPart")
+            if inner then
+                return default, inner
+            end
+            if default:IsA("BasePart") then
+                return default, default
+            end
+        end
+        local direct = tool:FindFirstChildOfClass("MeshPart")
+        if direct then
+            return tool, direct
+        end
+        return nil, nil
+    end
+
+    local function clearGunSkinMeshes67(tool, anchor, visible)
+        if anchor then
+            for _, v in ipairs(anchor:GetChildren()) do
+                if v ~= visible and (v.Name == "CurrentSkin" or v.Name == "\0" or v:IsA("MeshPart")) then
+                    v:Destroy()
+                end
+            end
+        end
+        for _, v in ipairs(tool:GetChildren()) do
+            if v.Name == "CurrentSkin" or (v:IsA("MeshPart") and v ~= visible) then
+                v:Destroy()
+            end
+        end
+    end
+
+    local function resolveSkinInfo67(modules, weaponKeys, skinName)
+        local alt = type(skinName) == "string" and skinName:gsub("%s+", "") or skinName
+        for _, wk in ipairs(weaponKeys) do
+            local sub = modules[wk]
+            if type(sub) == "table" then
+                local info = sub[skinName] or (alt ~= skinName and sub[alt] or nil)
+                if info then
+                    return info
+                end
+            end
+        end
+        return nil
+    end
+
+    local function gunSoundKeys67(toolName, weaponKeys)
+        local keys = {}
+        local seen = {}
+        local function add(k)
+            if type(k) == "string" and k ~= "" and not seen[k] then
+                seen[k] = true
+                keys[#keys + 1] = k
+            end
+        end
+        for _, wk in ipairs(weaponKeys) do
+            add(wk)
+        end
+        add(toolName)
+        local lower = toolName:lower()
+        if lower:sub(1, 1) == "[" and lower:sub(-1) == "]" then
+            lower = lower:sub(2, -2)
+        end
+        add(lower)
+        add(lower:gsub("%s+", ""))
+        add(lower:gsub("%-", ""))
+        return keys
+    end
 
     local knifeskins = {
         ["Golden Age Tanto"] = {soundid = "rbxassetid://5917819099", animationid = "rbxassetid://13473404819", positionoffset = Vector3.new(0, -0.20, -1.2), rotationoffset = Vector3.new(90, 263.7, 180)},
@@ -13638,14 +13470,6 @@ function skins67()
         ["Emerald"] = {soundid = "", animationid = "", positionoffset = Vector3.new(-0.03, -0.06, -0.92), rotationoffset = Vector3.new(168.63, 90.00, 108.00)},
         ["Ribbon"] = {soundid = "rbxassetid://130974579277249", animationid = "rbxassetid://124102609796063", positionoffset = Vector3.new(0.02, -0.25, -0.05), rotationoffset = Vector3.new(90.00, 0.00, 180.00)},
     }
-
-    local function clearmesh(tool, exclude)
-        for _, v in ipairs(tool:GetChildren()) do
-            if v:IsA("MeshPart") and v ~= exclude then
-                v:Destroy()
-            end
-        end
-    end
 
     local function applybat(tool, name)
         local mesh = nil
@@ -13687,17 +13511,32 @@ function skins67()
     end
 
     local function applygun(tool, name)
-        local defaultPart = tool:FindFirstChild("Default")
-        local orig = (defaultPart and defaultPart:IsA("MeshPart")) and defaultPart or tool:FindFirstChildOfClass("MeshPart")
-        if not orig then return end
+        local anchor, visible = gunDefaultAnchor67(tool)
+        if not anchor or not visible then
+            return
+        end
         local skinmodules = replicatedstorage:FindFirstChild("SkinModules")
         if not skinmodules then return end
         local function requireSkinModules(mod)
-            local ok, r = pcall(function()
-                return require(mod)
-            end)
-            if ok and type(r) == "table" then
-                return r
+            local attempts = {
+                function()
+                    if typeof(LPH_NO_VIRTUALIZE) == "function" then
+                        local req = LPH_NO_VIRTUALIZE(function(m)
+                            return require(m)
+                        end)
+                        return req(mod)
+                    end
+                    return require(mod)
+                end,
+                function()
+                    return require(mod)
+                end,
+            }
+            for _, attempt in ipairs(attempts) do
+                local ok, r = pcall(attempt)
+                if ok and type(r) == "table" then
+                    return r
+                end
             end
             return nil
         end
@@ -13710,33 +13549,59 @@ function skins67()
                 table.insert(weaponKeys, alias)
             end
         end
-        local info = nil
-        for _, wk in ipairs(weaponKeys) do
-            local sub = skinmodulesreq[wk]
-            if type(sub) == "table" and sub[name] then
-                info = sub[name]
-                break
-            end
-        end
+        local info = resolveSkinInfo67(skinmodulesreq, weaponKeys, name)
         if not info then return end
-        clearmesh(tool, orig)
+        clearGunSkinMeshes67(tool, anchor, visible)
         local skinpart = info.TextureID
+        local applied = false
         if typeof(skinpart) == "Instance" then
             local clone = skinpart:Clone()
-            clone.Parent = tool
-            clone.CFrame = orig.CFrame
             clone.Name = "CurrentSkin"
+            clone.Parent = anchor
+            clone.CFrame = visible.CFrame
             local w = Instance.new("Weld")
-            w.Part0 = clone
-            w.Part1 = orig
-            if info.CFrame then
-                w.C0 = info.CFrame:Inverse()
-            end
+            w.Part0 = anchor
+            w.Part1 = clone
+            w.C0 = (info.CFrame or CFrame.new()):Inverse()
             w.Parent = clone
-            orig.Transparency = 1
-        else
-            orig.TextureID = skinpart
-            orig.Transparency = 0
+            applied = true
+        elseif type(skinpart) == "string" and skinpart ~= "" and visible:IsA("MeshPart") then
+            visible.TextureID = skinpart
+            applied = true
+        end
+        if not applied then
+            local meshSource = skinmodules:FindFirstChild("GunModels")
+                and skinmodules.GunModels:FindFirstChild(name)
+            if not meshSource then
+                local meshesFolder = skinmodules:FindFirstChild("Meshes")
+                meshSource = meshesFolder and meshesFolder:FindFirstChild(name)
+            end
+            if meshSource then
+                local template = meshSource:IsA("MeshPart") and meshSource
+                    or meshSource:FindFirstChildWhichIsA("MeshPart")
+                if template then
+                    local clone = template:Clone()
+                    clone.Name = "CurrentSkin"
+                    clone.Parent = anchor
+                    clone.CFrame = visible.CFrame
+                    local w = Instance.new("Weld")
+                    w.Part0 = anchor
+                    w.Part1 = clone
+                    w.C0 = (info.CFrame or CFrame.new()):Inverse()
+                    w.Parent = clone
+                    applied = true
+                end
+            end
+        end
+        if applied then
+            if visible:IsA("BasePart") then
+                visible.Transparency = 1
+            end
+            if anchor:IsA("BasePart") and anchor ~= visible then
+                anchor.Transparency = 1
+            end
+        elseif visible:IsA("BasePart") then
+            visible.Transparency = 0
         end
         local handle = tool:FindFirstChild("Handle")
         if not handle then return end
@@ -13747,9 +13612,9 @@ function skins67()
                 local gunsounds = skinassets:FindFirstChild("GunShootSounds")
                 if gunsounds then
                     local obj = nil
-                    for _, wk in ipairs(weaponKeys) do
+                    for _, wk in ipairs(gunSoundKeys67(tool.Name, weaponKeys)) do
                         local sounds = gunsounds:FindFirstChild(wk)
-                        obj = sounds and sounds:FindFirstChild(name)
+                        obj = sounds and (sounds:FindFirstChild(name) or sounds:FindFirstChild(name:gsub("%s+", "")))
                         if obj then
                             break
                         end
@@ -14223,7 +14088,7 @@ function rageStompKeepTarget67(plr)
     return typeof(getgenv) == "function" and getgenv()._RainStompEngaged67 == true
 end
 
--- Sticky Target / Aim Assist / TP lock: keep Player while they are still in the game
+-- Sticky Target / Aim Assist: keep Player while they are still in the game
 -- (Character can be nil during KO / death / respawn)
 function stickyPlr(plr)
     return plr ~= nil and plr.Parent ~= nil
@@ -14237,14 +14102,10 @@ function syncTgt()
     local sa = shared.rain.SilentAim
     local tb = shared.rain.TriggerBot
     local aa = shared.rain["Aim Assist"]
-    local gm = shared.rain["Gun Mods"]
-    local agm = gm and gm["Advanced Gun Mods"]
     local saOn = type(sa) == "table" and sa.Enabled == true
     local tbOn = type(tb) == "table" and tb.Enabled == true
     local aaOn = type(aa) == "table" and aa.Enabled == true
-    local tpOn = type(agm) == "table" and agm["TP Bullet"] == true
-    local heOn = type(hitExploitOn67) == "function" and hitExploitOn67() and hitExploitActive67()
-    if not saOn and not tbOn and not aaOn and not tpOn and not heOn then
+    if not saOn and not tbOn and not aaOn then
         return
     end
 
@@ -14261,16 +14122,12 @@ function syncTgt()
         or (combatOkPlr67(m.LockedTarget) and (saSticky or SP or SP2))
     ) then
         unified = m.LockedTarget
-    elseif stickyPlr(m.TpBulletLockedTarget) and combatOkPlr67(m.TpBulletLockedTarget) then
-        unified = m.TpBulletLockedTarget
     else
         for _, plr in ipairs({
             m.SilentAimTarget,
             m.AimAssistTarget,
             m.TriggerbotTarget,
             m.CamlockTarget,
-            m.TpBulletActiveTarget,
-            m.HitExploitTarget,
         }) do
             if okPlr(plr) then
                 unified = plr
@@ -14316,13 +14173,6 @@ function syncTgt()
         end
     end
 
-    if not unified and tpOn and tostring(agm["TP Bullet Mode"] or "Target") == "Auto" then
-        local closest = rainGetClosestPlayerCached67()
-        if okPlr(closest) then
-            unified = closest
-        end
-    end
-
     if not unified and tbOn and selectAutomaticOn67() then
         if okPlr(m.TriggerbotTarget) then
             -- keep current trigger target
@@ -14362,15 +14212,6 @@ function syncTgt()
         if selectAutomaticOn67() or (selectModeOn67() and selectEngaged67()) or (aa.Sticky == true and stickyPlr(m.LockedTarget)) then
             SP2 = true
         end
-    end
-    if tpOn then
-        m.TpBulletActiveTarget = unified
-        if tostring(agm["TP Bullet Mode"] or "Target") == "Target" then
-            m.TpBulletLockedTarget = unified
-        end
-    end
-    if heOn then
-        m.HitExploitTarget = unified
     end
 end
 
@@ -15121,15 +14962,22 @@ local nv = typeof(LPH_NO_VIRTUALIZE) == "function" and LPH_NO_VIRTUALIZE or func
 
 function isDesHoodGame67()
     if game.PlaceId == 100702124803290
+        or game.PlaceId == 133839265368468
         or game.PlaceId == 10765456143
         or game.GameId == 10763035106
         or game.GameId == 10725680211
         or game.GameId == 10742768788
+        or game.GameId == 10765630591
         or game.GameId == 10765456143 then
         return true
     end
-    return type(CurrentGame) == "table"
+    if type(CurrentGame) == "table"
         and (CurrentGame.Name == "Des Hood" or CurrentGame.Name == "Glitch Des Hood")
+    then
+        return true
+    end
+    local gr = ReplicatedStorage:FindFirstChild("GameRemotes")
+    return gr ~= nil and gr:FindFirstChild("MainGameEvent") ~= nil
 end
 
 function desHoodCfg67()
@@ -15140,19 +14988,14 @@ function desHoodCfg67()
         return dh
     end
     local rage = r and r.Rage
-    local player = r and r.Player
-    local playerVC = type(player) == "table" and player["Value Changer"] or nil
     if type(rage) == "table" then
         if type(rage["Misc"]) == "table"
             or type(rage["Sentry"]) == "table"
-            or type(rage["Value Changer"]) == "table"
-            or type(playerVC) == "table"
             or type(rage["Kill All"]) == "table"
         then
             return {
                 ["Misc"] = type(rage["Misc"]) == "table" and rage["Misc"] or {},
                 ["Sentry"] = rage["Sentry"],
-                ["Value Changer"] = type(rage["Value Changer"]) == "table" and rage["Value Changer"] or playerVC,
                 ["Kill All"] = rage["Kill All"],
             }
         end
@@ -15349,47 +15192,366 @@ function desHoodSentryProtectedPlayer67()
     return Self
 end
 
-function desHoodCoerceSettingValue67(v, defaultOn)
-    if v == true then
-        return "9e9"
+-- Shots past the weapon's Assets.Loadout range are discarded server-side, so
+-- inflating Range past the template value only makes the shot invalid.
+function desHoodToolRangeCap67(tool)
+    if not tool then
+        return nil
     end
-    if v == false then
-        return "0"
+    local assets = game:GetService("ReplicatedStorage"):FindFirstChild("Assets")
+    local loadout = assets and assets:FindFirstChild("Loadout")
+    local template = loadout and loadout:FindFirstChild(tool.Name)
+    local rv = template and template:FindFirstChild("Range")
+    local n = rv and tonumber(rv.Value)
+    if n and n > 0 then
+        return n
     end
-    if type(v) == "number" then
-        return v == 0 and "0" or tostring(v)
-    end
-    if type(v) == "string" then
-        local lower = string.lower(v)
-        if lower == "true" then
-            return "9e9"
-        end
-        if lower == "false" or v == "" or v == "0" then
-            return "0"
-        end
-        return v
-    end
-    return defaultOn == true and "9e9" or "0"
+    return nil
 end
 
-function desHoodArmorValue67()
-    local dh = desHoodCfg67()
-    local vc = dh and dh["Value Changer"]
-    local legacy = dh and dh["Fun Edits"]
-    local v = (type(vc) == "table" and vc["Armor Value"])
-        or (type(legacy) == "table" and legacy["Armor Value"])
-        or (dh and dh["Armor Value"])
-    return desHoodCoerceSettingValue67(v, true)
+function desHoodShotOrigin67(character, tool, handle)
+    local rootPart = character and (
+        character:FindFirstChild("HumanoidRootPart")
+        or character:FindFirstChild("UpperTorso")
+        or character:FindFirstChild("Torso")
+    )
+    local origin = rootPart and rootPart.Position or (handle and handle.Position)
+    if not tool or not handle then
+        return origin, rootPart
+    end
+    local muzzle = tool:FindFirstChild("Default")
+    muzzle = muzzle and muzzle:FindFirstChild("Mesh")
+    muzzle = muzzle and muzzle:FindFirstChild("Muzzle")
+    if rootPart then
+        if muzzle and (muzzle.WorldPosition - rootPart.Position).Magnitude <= 20 then
+            origin = muzzle.WorldPosition
+        elseif (handle.Position - rootPart.Position).Magnitude <= 20 then
+            origin = handle.Position
+        end
+    end
+    return origin, rootPart
 end
 
-function desHoodMuscleValue67()
-    local dh = desHoodCfg67()
-    local vc = dh and dh["Value Changer"]
-    local legacy = dh and dh["Fun Edits"]
-    local v = (type(vc) == "table" and vc["Muscle Value"])
-        or (type(legacy) == "table" and legacy["Muscle Value"])
-        or (dh and dh["Muscle Value"])
-    return desHoodCoerceSettingValue67(v, true)
+function desHoodInfRangeTarget67()
+    if type(Mango) ~= "table" or type(Mango.Locals) ~= "table" then
+        return nil, nil, nil
+    end
+    local loc = Mango.Locals
+    local plr = (type(rageBotSilentTarget67) == "function" and rageBotSilentTarget67())
+        or loc.SilentAimTarget
+        or loc.LockedTarget
+        or loc.AimAssistTarget
+    if not plr or not plr.Parent or plr == Self then
+        return nil, nil, nil
+    end
+    local char = plr.Character
+    if not char then
+        return nil, nil, nil
+    end
+    local hitPart = loc.UniSilentTargetPart
+    if not (hitPart and hitPart:IsA("BasePart") and hitPart:IsDescendantOf(char)) then
+        hitPart = char:FindFirstChild("Head")
+            or char:FindFirstChild("HumanoidRootPart")
+            or char:FindFirstChild("UpperTorso")
+    end
+    if not hitPart then
+        return nil, nil, nil
+    end
+    return plr, hitPart, hitPart.Position
+end
+
+local function desHoodWriteRangeArg67(args, n, rangeCap)
+    if type(args) ~= "table" or type(rangeCap) ~= "number" then
+        return
+    end
+    n = n or args.n or #args
+    -- RemoteSpy: ShootGun Handle Origin ... Normal Range Damage — range is arg 8.
+    if n >= 8 and (args[8] == nil or type(args[8]) == "number") then
+        args[8] = rangeCap
+    end
+end
+
+local function desHoodSpoofOrigin67(muzzle, hitPos, rangeCap)
+    local dist = (hitPos - muzzle).Magnitude
+    if dist <= rangeCap then
+        return muzzle
+    end
+    local dir = hitPos - muzzle
+    if dir.Magnitude > 1e-4 then
+        dir = dir.Unit
+    else
+        dir = Vector3.new(0, 0, -1)
+    end
+    return hitPos - dir * math.min(rangeCap * 0.85, 80)
+end
+
+function desHoodInfRangePatchShootGun67(args, argc)
+    if not desHoodInfRangeOn67() then
+        return false
+    end
+    local rageFiring = typeof(getgenv) == "function" and getgenv()._RainRageBotFiring67 == true
+    if rageFiring and type(rageBotModOn67) == "function" and not rageBotModOn67("Inf Range") then
+        return false
+    end
+    if type(hitExploitTpActive67) == "function" and hitExploitTpActive67() then
+        return false
+    end
+    if type(args) ~= "table" or args[1] ~= "ShootGun" then
+        return false
+    end
+    local n = argc or args.n or #args
+    if n < 3 then
+        return false
+    end
+    local _, hitPart, hitPos = desHoodInfRangeTarget67()
+    if not hitPart or typeof(hitPos) ~= "Vector3" then
+        return false
+    end
+    local handle = args[2]
+    local tool = handle and handle:FindFirstAncestorWhichIsA("Tool")
+    local rangeCap = desHoodToolRangeCap67(tool) or 95
+    local char = Self and Self.Character
+    local muzzle = typeof(args[3]) == "Vector3" and args[3] or nil
+    if typeof(muzzle) ~= "Vector3" and char and handle then
+        muzzle = select(1, desHoodShotOrigin67(char, tool, handle))
+    end
+    if typeof(muzzle) ~= "Vector3" then
+        return false
+    end
+    local writeRange = not (rageFiring and type(rageBotModOn67) == "function" and not rageBotModOn67("Range Modifier"))
+    local teleOrigin = desHoodSpoofOrigin67(muzzle, hitPos, rangeCap)
+    args[3] = teleOrigin
+    local norm = Vector3.yAxis
+    local d = hitPos - teleOrigin
+    if d.Magnitude > 1e-4 then
+        norm = d.Unit
+    end
+    if type(args[4]) == "table" and type(args[4][1]) == "table" and args[4][1].Result1 ~= nil then
+        for _, pellet in ipairs(args[4]) do
+            if type(pellet) == "table" then
+                pellet.AimPosition = hitPos
+                pellet.Result1 = hitPos
+                if hitPart then
+                    if pellet.Result2 == nil or typeof(pellet.Result2) == "Instance" then
+                        pellet.Result2 = hitPart
+                    elseif type(pellet.Result2) == "boolean" then
+                        pellet.Result2 = true
+                    end
+                    local ph = pellet.Hit
+                    if ph == nil or typeof(ph) == "Instance" then
+                        pellet.Hit = hitPart
+                    elseif type(ph) == "boolean" then
+                        pellet.Hit = true
+                    end
+                end
+                if pellet.Result3 ~= nil and typeof(pellet.Result3) ~= "boolean" then
+                    pellet.Result3 = norm
+                end
+            end
+        end
+        if writeRange then
+            desHoodWriteRangeArg67(args, n, rangeCap)
+        end
+        return true
+    end
+    -- RemoteSpy revolver: nil, hitPos, hitInst, normal, range, damage
+    if args[4] == nil and typeof(args[5]) == "Vector3" then
+        args[5] = hitPos
+        if hitPart then
+            if args[6] == nil or typeof(args[6]) == "Instance" then
+                args[6] = hitPart
+            elseif type(args[6]) == "boolean" then
+                args[6] = true
+            end
+        end
+        if typeof(args[7]) ~= "boolean" and typeof(args[7]) ~= "Instance" then
+            args[7] = norm
+        end
+        if writeRange then
+            desHoodWriteRangeArg67(args, n, rangeCap)
+        end
+        return true
+    end
+    if typeof(args[4]) == "Vector3" then
+        args[4] = hitPos
+        if hitPart then
+            if args[5] == nil or typeof(args[5]) == "Instance" then
+                args[5] = hitPart
+            elseif type(args[5]) == "boolean" then
+                args[5] = true
+            end
+        end
+        if n >= 6 and typeof(args[6]) ~= "boolean" and typeof(args[6]) ~= "Instance" then
+            args[6] = norm
+        end
+        if writeRange then
+            desHoodWriteRangeArg67(args, n, rangeCap)
+        end
+        return true
+    end
+    return false
+end
+
+local function desHoodLosToTarget67(origin, targetChar)
+    if type(losChar) == "function" then
+        return losChar(origin, targetChar, Self and Self.Character)
+    end
+    if typeof(origin) ~= "Vector3" or not targetChar then
+        return false
+    end
+    local part = targetChar:FindFirstChild("Head")
+        or targetChar:FindFirstChild("HumanoidRootPart")
+        or targetChar:FindFirstChild("UpperTorso")
+    if not part or not part:IsA("BasePart") then
+        return false
+    end
+    local toTarget = part.Position - origin
+    local dist = toTarget.Magnitude
+    if dist < 1e-4 then
+        return true
+    end
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = type(rayIgn) == "function" and rayIgn(Self and Self.Character) or {}
+    params.IgnoreWater = true
+    local hit = workspace:Raycast(origin, toTarget.Unit * (dist + 2), params)
+    return hit and hit.Instance and hit.Instance:IsDescendantOf(targetChar)
+end
+
+local function desHoodSnapTpY67(flatPos)
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = type(rayIgn) == "function" and rayIgn(Self and Self.Character) or {}
+    params.IgnoreWater = true
+    local probeOrigin = Vector3.new(flatPos.X, flatPos.Y + 8, flatPos.Z)
+    local hit = workspace:Raycast(probeOrigin, Vector3.new(0, -24, 0), params)
+    if hit then
+        return Vector3.new(flatPos.X, hit.Position.Y + 3, flatPos.Z)
+    end
+    return flatPos
+end
+
+local function desHoodFindVisibleTpPos67(targetPos, targetChar, range, preferredDir, inRange)
+    local standOff = math.min(range * 0.85, 80)
+    if inRange and preferredDir.Magnitude > 0.01 then
+        standOff = math.min(standOff, preferredDir.Magnitude * 0.95)
+    end
+    standOff = math.max(standOff, math.min(range * 0.5, 25))
+
+    local flatPref = Vector3.new(preferredDir.X, 0, preferredDir.Z)
+    if flatPref.Magnitude < 0.01 then
+        flatPref = Vector3.new(1, 0, 0)
+    else
+        flatPref = flatPref.Unit
+    end
+    local prefAngle = math.atan2(flatPref.X, flatPref.Z)
+    local bestPos = nil
+    local bestScore = -math.huge
+    local samples = 32
+    local eyeOffset = Vector3.new(0, 1.5, 0)
+
+    for i = 0, samples - 1 do
+        local step = math.ceil(i / 2) * (2 * math.pi / samples)
+        local sign = (i % 2 == 0) and 1 or -1
+        local angle = prefAngle + step * sign
+        local flat = Vector3.new(math.sin(angle), 0, math.cos(angle)) * standOff
+        local candidate = desHoodSnapTpY67(targetPos + flat)
+        local shootFrom = candidate + eyeOffset
+        if desHoodLosToTarget67(shootFrom, targetChar) then
+            local angleDiff = math.abs(((angle - prefAngle + math.pi) % (2 * math.pi)) - math.pi)
+            local score = -angleDiff
+            if score > bestScore then
+                bestScore = score
+                bestPos = candidate
+            end
+        end
+    end
+
+    if bestPos then
+        return bestPos
+    end
+    return desHoodSnapTpY67(targetPos + flatPref * standOff)
+end
+
+function desHoodTpIfNeeded67(targetPos, range, targetChar)
+    local character = Self and Self.Character
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    if not rootPart or typeof(targetPos) ~= "Vector3" or not range or range <= 0 then
+        return nil, false
+    end
+    local offsetToTarget = rootPart.Position - targetPos
+    local inRange = offsetToTarget.Magnitude <= range
+    local shootFrom = rootPart.Position + Vector3.new(0, 1.5, 0)
+    local hasLos = not targetChar or desHoodLosToTarget67(shootFrom, targetChar)
+    if inRange and hasLos then
+        return nil, false
+    end
+    local saved = rootPart.CFrame
+    local tpPos
+    if targetChar then
+        tpPos = desHoodFindVisibleTpPos67(targetPos, targetChar, range, offsetToTarget, inRange)
+    else
+        local dir = offsetToTarget
+        if dir.Magnitude < 0.01 then
+            dir = Vector3.new(1, 0, 0)
+        else
+            dir = dir.Unit
+        end
+        local standOff = math.min(range * 0.85, 80)
+        tpPos = desHoodSnapTpY67(targetPos + dir * standOff)
+    end
+    desHoodApplyCharacterTp67(CFrame.new(tpPos, Vector3.new(targetPos.X, tpPos.Y, targetPos.Z)))
+    return saved, true
+end
+
+function desHoodApplyCharacterTp67(cf)
+    if typeof(cf) ~= "CFrame" then
+        return false
+    end
+    local char = Self and Self.Character
+    local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+    if not rootPart then
+        return false
+    end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local ok = false
+    pcall(function()
+        if hum then
+            hum.PlatformStand = false
+        end
+        rootPart.AssemblyLinearVelocity = Vector3.new(0.08, 0.02, 0.08)
+        rootPart.AssemblyAngularVelocity = Vector3.zero
+        if typeof(char.PivotTo) == "function" then
+            char:PivotTo(cf)
+        end
+        rootPart.CFrame = cf
+        if typeof(sethiddenproperty) == "function" then
+            pcall(sethiddenproperty, rootPart, "NetworkIsSleeping", false)
+        end
+        local cam = workspace.CurrentCamera
+        if cam and hum then
+            cam.CameraType = Enum.CameraType.Custom
+            cam.CameraSubject = hum
+        end
+        ok = true
+    end)
+    return ok
+end
+
+local function desHoodWaitForAmmo67(tool, backpack, character, timeout)
+    timeout = timeout or 2
+    local deadline = os.clock() + timeout
+    while os.clock() < deadline do
+        tool = (backpack and backpack:FindFirstChild("[TacticalShotgun]"))
+            or (character and character:FindFirstChild("[TacticalShotgun]"))
+            or tool
+        local ammo = tool and tool:FindFirstChild("Ammo")
+        if ammo and (tonumber(ammo.Value) or 0) > 0 then
+            return tool, ammo, tool and tool:FindFirstChild("Handle")
+        end
+        task.wait(0.08)
+    end
+    return tool, tool and tool:FindFirstChild("Ammo"), tool and tool:FindFirstChild("Handle")
 end
 
 function desHoodForceReset67()
@@ -15644,72 +15806,6 @@ local function desHoodPrimeLoadoutCache67()
             task.wait(0.25)
         end
     end)
-end
-
-local function desHoodFireSettings67(key, value)
-    local remote = type(getRem) == "function" and getRem() or nil
-    if remote and remote:IsA("RemoteEvent") then
-        remote:FireServer("ChangeSettings", key, tostring(value or "9e9"))
-    end
-end
-
-local function desHoodSafeArmorValue67()
-    local char = Self and Self.Character
-    if not char then
-        return 0
-    end
-    local be = char:FindFirstChild("BodyEffects")
-    if be then
-        local armor = be:FindFirstChild("Armor")
-        if armor then
-            return tonumber(armor.Value) or 0
-        end
-    end
-    for _, v in ipairs(char:GetDescendants()) do
-        if v:IsA("ValueBase") and string.lower(v.Name) == "armor" then
-            return tonumber(v.Value) or 0
-        end
-    end
-    return 0
-end
-
-function desHoodValueChangerOn67()
-    local dh = desHoodCfg67()
-    local vc = dh and dh["Value Changer"]
-    return type(vc) == "table" and vc.Enabled == true
-end
-
-function desHoodApplyArmor67()
-    if not desHoodValueChangerOn67() then
-        return
-    end
-    task.spawn(function()
-        local buy = type(Mango) == "table" and Mango._RainTryPurchaseArmor67
-        if type(buy) ~= "function" and typeof(getgenv) == "function" then
-            buy = getgenv().RainTryPurchaseArmor67
-        end
-        if desHoodSafeArmorValue67() < 200 and type(buy) == "function" then
-            for _ = 1, 3 do
-                local ok, bought = pcall(buy)
-                if ok and bought == true then
-                    task.wait(0.5)
-                    if desHoodSafeArmorValue67() >= 200 then
-                        break
-                    end
-                end
-                task.wait(0.35)
-            end
-        end
-        desHoodFireSettings67("ArmorSave", desHoodArmorValue67())
-        desHoodForceReset67()
-    end)
-end
-
-function desHoodApplyMuscle67()
-    if not desHoodValueChangerOn67() then
-        return
-    end
-    desHoodFireSettings67("MuscleInformation", desHoodMuscleValue67())
 end
 
 local SentryActive = false
@@ -16054,6 +16150,10 @@ local SentryConnections = {}
 
         local function fireSentryKillShot(remote, tool, handle, origin, hitPos, hitInst)
             if sentryUsesPelletRemote(remote) then
+                local rangeCap = desHoodToolRangeCap67(tool)
+                if rangeCap and (hitPos - origin).Magnitude > rangeCap then
+                    return
+                end
                 local pellets = {}
                 for _ = 1, 20 do
                     pellets[#pellets + 1] = {
@@ -16064,7 +16164,17 @@ local SentryConnections = {}
                     }
                 end
                 local damageObject = tool:FindFirstChild("Damage")
-                remote:FireServer("ShootGun", handle, origin, pellets, nil, nil, nil, math.huge, damageObject and damageObject.Value or 50)
+                local shotDamage = damageObject and damageObject.Value or 50
+                local shotRange = rangeCap or math.huge
+                local args = table.pack("ShootGun", handle, origin, pellets, nil, nil, nil, shotRange, shotDamage)
+                if type(Mango) == "table"
+                    and type(Mango._RainHcOldFireServer) == "function"
+                    and type(rainDispatchFireServer67) == "function"
+                then
+                    rainDispatchFireServer67(Mango._RainHcOldFireServer, remote, args)
+                else
+                    remote:FireServer(table.unpack(args, 1, args.n))
+                end
                 return
             end
             if type(fireSg) == "function" then
@@ -16144,14 +16254,25 @@ local SentryConnections = {}
                 return false
             end
 
-            local origin = handle.Position
+            local rangeCap = desHoodToolRangeCap67(tool) or 95
+            local shotOrigin = desHoodShotOrigin67(character, tool, handle)
+            local inRangeTargets = {}
+            for _, head in ipairs(validTargets) do
+                if (head.Position - shotOrigin).Magnitude <= rangeCap then
+                    inRangeTargets[#inRangeTargets + 1] = head
+                end
+            end
+            if #inRangeTargets == 0 then
+                return false
+            end
             tool.Enabled = true
             if tool.Parent ~= character then
                 tool.Parent = character
             end
 
-            for _, head in ipairs(validTargets) do
+            for _, head in ipairs(inRangeTargets) do
                 local position = head.Position
+                local origin = desHoodShotOrigin67(character, tool, handle)
                 for _ = 1, 8 do
                     pcall(fireSentryKillShot, remote, tool, handle, origin, position, head)
                 end
@@ -17370,19 +17491,16 @@ local function desHoodInfAmmoInit67()
             desHoodFireLoadout67()
         end)
 
-        if not wasInHand then
-            activeRequests2[emptyTool] = nil
-            return
-        end
-
         local copy = findLoadedCopy(weaponName, emptyTool)
         if copy and copy.Parent then
-            equipTool(copy)
+            if wasInHand then
+                equipTool(copy)
+            end
             activeRequests2[emptyTool] = nil
             return
         end
 
-        for _ = 1, 20 do
+        for _ = 1, 25 do
             if not tactEnabled() or not emptyTool.Parent then
                 break
             end
@@ -17393,7 +17511,9 @@ local function desHoodInfAmmoInit67()
             end
             local loaded = findLoadedCopy(weaponName, emptyTool)
             if loaded and loaded.Parent then
-                equipTool(loaded)
+                if wasInHand then
+                    equipTool(loaded)
+                end
                 activeRequests2[emptyTool] = nil
                 return
             end
@@ -17738,41 +17858,68 @@ function desHoodKillAll67()
     if (tonumber(ammo.Value) or 0) <= 0 then
         if desHoodInfAmmoOn67() then
             desHoodFireLoadout67()
+            tool, ammo, handle = desHoodWaitForAmmo67(tool, backpack, character, 2.5)
         end
-        return false
+        if not ammo or (tonumber(ammo.Value) or 0) <= 0 then
+            return false
+        end
     end
-    local pellets = {}
+    local rangeObject = tool:FindFirstChild("Range")
+    local range = desHoodToolRangeCap67(tool)
+        or (rangeObject and tonumber(rangeObject.Value))
+        or 95
+    local origin = desHoodShotOrigin67(character, tool, handle)
+    local inRangeHeads = {}
     for _, player in ipairs(Players:GetPlayers()) do
-        if killAllValidTarget67(player) then
+        if killAllValidTarget67(player) and desHoodKnockCheck67(player, true) then
             local head = killAllHitPart67(player.Character)
-            if head then
-                local position = head.Position
-                for _ = 1, 20 do
-                    pellets[#pellets + 1] = {
-                        AimPosition = position,
-                        Result1 = position,
-                        Result2 = head,
-                        Result3 = Vector3.yAxis,
-                    }
-                end
+            if head and (head.Position - origin).Magnitude <= range then
+                inRangeHeads[#inRangeHeads + 1] = head
             end
         end
     end
-    if #pellets == 0 then
+    if #inRangeHeads == 0 then
         return false
     end
     local damageObject = tool:FindFirstChild("Damage")
-    local range = math.huge
     local damage = damageObject and damageObject.Value or 50
     tool.Enabled = true
     if tool.Parent ~= character then
         tool.Parent = character
     end
-    for _ = 1, 1 do
+    local function buildPellets(heads)
+        local pellets = {}
+        for _, head in ipairs(heads) do
+            local position = head.Position
+            for _ = 1, 20 do
+                pellets[#pellets + 1] = {
+                    AimPosition = position,
+                    Result1 = position,
+                    Result2 = head,
+                    Result3 = Vector3.yAxis,
+                }
+            end
+        end
+        return pellets
+    end
+    local function fireAt(heads, shotOrigin)
+        local pellets = buildPellets(heads)
+        if #pellets == 0 then
+            return
+        end
+        local args = table.pack("ShootGun", handle, shotOrigin, pellets, nil, nil, nil, range, damage)
         pcall(function()
-            remote:FireServer("ShootGun", handle, handle.Position, pellets, nil, nil, nil, range, damage)
+            if type(Mango) == "table"
+                and type(Mango._RainHcOldFireServer) == "function"
+                and type(rainDispatchFireServer67) == "function"
+            then
+                rainDispatchFireServer67(Mango._RainHcOldFireServer, remote, args)
+            else
+                remote:FireServer(table.unpack(args, 1, args.n))
+            end
         end)
     end
+    fireAt(inRangeHeads, origin)
     if tool.Parent then
         tool.Parent = backpack
     end
@@ -17847,8 +17994,6 @@ local function desHoodActionsPoll67()
         return
     end
     local handlers = {
-        ["Apply Armor"] = desHoodApplyArmor67,
-        ["Apply Muscle"] = desHoodApplyMuscle67,
         ["Force Reset"] = desHoodForceReset67,
         ["Kill All"] = function()
             if desHoodCfgOn67("Kill All Enabled") then
@@ -17899,23 +18044,6 @@ local function desHoodKillAllInit67()
             local rk = keyCd(dhGet67("Kill All On Respawn Keybind", "Kill All", "On Respawn Keybind") or "")
             if rk and input.KeyCode == rk then
                 desHoodToggleKillFlag67("On Respawn")
-            end
-        end
-        if dh and desHoodValueChangerOn67() then
-            local vc = dh["Value Changer"] or dh["Fun Edits"]
-            local ak = (type(vc) == "table" and vc["Apply Armor Keybind"]) or dh["Apply Armor Keybind"]
-            if type(ak) == "string" and ak ~= "" then
-                local kc = keyCd(ak)
-                if kc and input.KeyCode == kc then
-                    pcall(desHoodApplyArmor67)
-                end
-            end
-            local mk = (type(vc) == "table" and vc["Apply Muscle Keybind"]) or dh["Apply Muscle Keybind"]
-            if type(mk) == "string" and mk ~= "" then
-                local kc = keyCd(mk)
-                if kc and input.KeyCode == kc then
-                    pcall(desHoodApplyMuscle67)
-                end
             end
         end
     end))
@@ -19832,12 +19960,10 @@ function desHoodInit67()
         if typeof(getgenv) == "function" and not desHoodGetgenvDone then
             desHoodGetgenvDone = true
             local g = getgenv()
-            g.desHoodApplyArmor67 = desHoodApplyArmor67
-            g.desHoodApplyMuscle67 = desHoodApplyMuscle67
             g.desHoodForceReset67 = desHoodForceReset67
             g.desHoodKillAll67 = desHoodKillAll67
-            g.RainDesHoodApplyArmor = desHoodApplyArmor67
-            g.RainDesHoodApplyMuscle = desHoodApplyMuscle67
+            g.desHoodTpIfNeeded67 = desHoodTpIfNeeded67
+            g.desHoodApplyCharacterTp67 = desHoodApplyCharacterTp67
             g.RainDesHoodForceReset = desHoodForceReset67
             g.RainDesHoodKillAll = desHoodKillAll67
         end
@@ -19861,6 +19987,40 @@ end
 
 function rageBotOn67()
     return rainEnabled67("Rage.Rage Bot") or rainEnabled67("Game Specific.Des Hood.Rage Bot")
+end
+
+function rageBotSaCfg67()
+    local r = shared.rain and shared.rain.Rage
+    local sa = type(r) == "table" and r["Silent Aim"]
+    if type(sa) == "table" then
+        return sa
+    end
+    local dh = shared.rain and shared.rain["Game Specific"] and shared.rain["Game Specific"]["Des Hood"]
+    sa = type(dh) == "table" and dh["Silent Aim"]
+    return type(sa) == "table" and sa or nil
+end
+
+function rageBotModOn67(key)
+    local sa = rageBotSaCfg67()
+    if type(sa) ~= "table" or sa[key] == nil then
+        return true
+    end
+    return sa[key] == true
+end
+
+function rageBotShotRange67(tool)
+    if rageBotModOn67("Range Modifier") then
+        return desHoodToolRangeCap67(tool) or 95
+    end
+    local rv = tool and tool:FindFirstChild("Range")
+    local n = rv and tonumber(rv.Value)
+    if (not n or n <= 0) and tool and tool.GetAttribute then
+        n = tonumber(tool:GetAttribute("Range"))
+    end
+    if n and n > 0 then
+        return n
+    end
+    return 200
 end
 
 function rageBotBlocksRainCombat67()
@@ -19903,8 +20063,18 @@ function rageBotSilentActive67()
     if not rageBotOn67() then
         return false
     end
+    if rageBotManualUntarget67() then
+        return false
+    end
     local st = typeof(getgenv) == "function" and getgenv()._RainRageBotSA
     return type(st) == "table" and st.active == true
+end
+
+function rageBotManualUntarget67()
+    if not rageBotOn67() then
+        return false
+    end
+    return typeof(getgenv) == "function" and getgenv()._RainRageBotManualUntarget67 == true
 end
 
 local woodieLastPatchedTool67 = nil
@@ -19984,6 +20154,9 @@ function woodieShootTarget67(player)
     if (tonumber(ammo.Value) or 0) <= 0 then
         return false
     end
+    if rageBotModOn67("Fire Rate") then
+        woodiePatchFireRate67(tool)
+    end
     local targetCharacter = player.Character
     local targetHum = targetCharacter and targetCharacter:FindFirstChildOfClass("Humanoid")
     local head = targetCharacter and targetCharacter:FindFirstChild("Head")
@@ -19991,6 +20164,8 @@ function woodieShootTarget67(player)
         return false
     end
     local position = head.Position
+    local rangeCap = rageBotShotRange67(tool)
+    local origin = desHoodShotOrigin67(character, tool, handle)
     local pellets = {}
     for _ = 1, 20 do
         pellets[#pellets + 1] = {
@@ -20001,107 +20176,37 @@ function woodieShootTarget67(player)
         }
     end
     local damageObject = tool:FindFirstChild("Damage")
-    local range = math.huge
     local damage = damageObject and damageObject.Value or 50
     tool.Enabled = true
     if tool.Parent ~= character then
         tool.Parent = character
     end
-    for _ = 1, 1 do
-        pcall(function()
-            remote:FireServer("ShootGun", handle, handle.Position, pellets, nil, nil, nil, range, damage)
-        end)
+    local args = table.pack("ShootGun", handle, origin, pellets, nil, nil, nil, rangeCap, damage)
+    local g = typeof(getgenv) == "function" and getgenv() or nil
+    if g then
+        g._RainRageBotFiring67 = true
+    end
+    local ok = pcall(function()
+        if type(Mango) == "table"
+            and type(Mango._RainHcOldFireServer) == "function"
+            and type(rainDispatchFireServer67) == "function"
+        then
+            rainDispatchFireServer67(Mango._RainHcOldFireServer, remote, args)
+        else
+            remote:FireServer(table.unpack(args, 1, args.n))
+        end
+    end)
+    if g then
+        g._RainRageBotFiring67 = nil
+    end
+    if not ok then
+        return false
     end
     woodieLastShoot67 = os.clock()
     if tool.Parent then
         tool.Parent = backpack
     end
     return true
-end
-
-function hitExploitInit67()
-    if typeof(getgenv) == "function" and getgenv()._RainHitExploitInitDone then
-        return
-    end
-    if not hitExploitGhGame67() then
-        return
-    end
-    if typeof(getgenv) == "function" then
-        getgenv()._RainHitExploitInitDone = true
-    end
-
-    local RS = game:GetService("RunService")
-    local hitExploitHighlight = nil
-
-    local function clearHighlight()
-        if hitExploitHighlight then
-            pcall(function()
-                hitExploitHighlight:Destroy()
-            end)
-            hitExploitHighlight = nil
-        end
-    end
-
-    local function syncHighlight()
-        clearHighlight()
-        if not hitExploitOn67() or not hitExploitHighlightOn67() or not hitExploitActive67() then
-            return
-        end
-        local plr = hitExploitUnifiedTarget67()
-        local char = plr and plr.Character
-        if not char then
-            return
-        end
-        local hl = Instance.new("Highlight")
-        hl.Name = "RainHitExploitHighlight"
-        hl.FillColor = Color3.fromRGB(255, 70, 90)
-        hl.OutlineColor = Color3.fromRGB(255, 140, 150)
-        hl.FillTransparency = 0.5
-        hl.OutlineTransparency = 0.08
-        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        hl.Parent = char
-        hitExploitHighlight = hl
-    end
-
-    if typeof(getgenv) == "function" then
-        getgenv()._RainHitExploitSyncHighlight67 = syncHighlight
-        getgenv()._RainHitExploitUnload67 = function()
-            clearHighlight()
-            if type(Mango) == "table" and type(Mango.Locals) == "table" then
-                Mango.Locals.HitExploitActive = false
-                Mango.Locals.HitExploitTarget = nil
-            end
-            getgenv()._RainHitExploitInitDone = nil
-            getgenv()._RainHitExploitSyncHighlight67 = nil
-            getgenv()._RainHitExploitUnload67 = nil
-        end
-    end
-
-    trkConn(RS.Heartbeat:Connect(function()
-        local ml = Mango and Mango.Locals
-        if type(ml) ~= "table" then
-            return
-        end
-        if not hitExploitOn67() then
-            if ml.HitExploitActive then
-                ml.HitExploitActive = false
-                clearHighlight()
-            end
-            return
-        end
-        if ml.HitExploitActive and type(syncTgt) == "function" then
-            pcall(syncTgt)
-        end
-        local plr = hitExploitTarget67()
-        if plr and hitExploitHighlightOn67() then
-            local char = plr.Character
-            if char and (not hitExploitHighlight or hitExploitHighlight.Parent ~= char) then
-                syncHighlight()
-            end
-        else
-            clearHighlight()
-        end
-    end))
 end
 
 function woodieRageInit67()
@@ -20180,6 +20285,9 @@ function woodieRageInit67()
     if typeof(getgenv) == "function" then
         getgenv()._RainRageBotSA = { active = false, target = nil }
     end
+
+    local syncRageAimLocals
+    local woodieAutoShootTick
 
     local voidActive = false
     local voidReturnCf = nil
@@ -20332,6 +20440,9 @@ function woodieRageInit67()
     end
 
     local function syncSaAimPlr(plr)
+        if SA.manualUntarget then
+            return
+        end
         if not plr or not plr.Parent then
             -- Never drop a sticky lock here; only clear aim parts.
             SA.part = nil
@@ -20440,6 +20551,11 @@ function woodieRageInit67()
             SA.infoPlr = nil
             SA.part = nil
             SA.pos = nil
+            SP = false
+            SP2 = false
+            if typeof(getgenv) == "function" then
+                getgenv()._RainRageBotManualUntarget67 = true
+            end
             clearRageTargetHighlight()
             if targetRespawnConn then
                 pcall(function() targetRespawnConn:Disconnect() end)
@@ -20505,6 +20621,9 @@ function woodieRageInit67()
             return
         end
         SA.manualUntarget = false
+        if typeof(getgenv) == "function" then
+            getgenv()._RainRageBotManualUntarget67 = false
+        end
         SA.active = true
         SA.target = plr
         if selectableTarget(plr) then
@@ -20524,6 +20643,14 @@ function woodieRageInit67()
         if typeof(getgenv) == "function" then
             getgenv()._RainRageBotSA = { active = true, target = plr }
         end
+        if type(syncRageAimLocals) == "function" then
+            syncRageAimLocals()
+        end
+        if type(woodieAutoShootTick) == "function" then
+            woodieAutoShootTick(SA.mode)
+        elseif selectableTarget(plr) then
+            pcall(woodieShootTarget67, plr)
+        end
     end
 
     local function toggleSilentAim()
@@ -20535,11 +20662,17 @@ function woodieRageInit67()
             return
         end
         SA.manualUntarget = false
+        if typeof(getgenv) == "function" then
+            getgenv()._RainRageBotManualUntarget67 = false
+        end
         local mode = string.lower(tostring(rGet("Silent Aim", "Mode", "Woodie Silent Mode", "Sticky")))
         SA.mode = mode
         if mode == "target all" then
             SA.active = true
             SA.target = nil
+            if type(woodieAutoShootTick) == "function" then
+                woodieAutoShootTick(mode)
+            end
         else
             setTarget(closestToMouse())
         end
@@ -20931,9 +21064,6 @@ function woodieRageInit67()
     end
 
     local function rageSpectateEnabled67()
-        if type(isDesHoodGame67) == "function" and isDesHoodGame67() then
-            return true
-        end
         return rGet("Silent Aim", "Spectate", "Woodie Spectate", false) == true
     end
 
@@ -20974,7 +21104,7 @@ function woodieRageInit67()
             specCamSubj = cam and cam.CameraSubject
         end
         local cam = getCam()
-        if cam then
+        if cam and cam.CameraSubject ~= hum then
             pcall(function()
                 cam.CameraType = Enum.CameraType.Custom
                 cam.CameraSubject = hum
@@ -21030,7 +21160,7 @@ function woodieRageInit67()
         return nil
     end
 
-    local function syncRageAimLocals()
+    syncRageAimLocals = function()
         if type(Mango) ~= "table" or type(Mango.Locals) ~= "table" then
             return
         end
@@ -21074,7 +21204,32 @@ function woodieRageInit67()
         SA.pos = part and part.Position
     end
 
-    local function woodieAutoShootTick(mode)
+    local function woodieDirectShootTick(mode)
+        if mode == "target all" then
+            local plr = closestToMouse()
+            if plr and plr.Parent and (plr.Character or SA.target == plr) then
+                if validTarget(plr) or (SA.target == plr and plr.Character) then
+                    woodieShootTarget67(plr)
+                end
+            end
+        elseif mode == "auto select" then
+            local plr = SA.target
+            if not plr or not plr.Parent then
+                plr = closestToMouse()
+            end
+            if plr and plr.Parent and (plr.Character or SA.target == plr) then
+                if validTarget(plr) or (SA.target == plr and plr.Character) then
+                    woodieShootTarget67(plr)
+                end
+            end
+        elseif SA.target and SA.target.Parent then
+            if validTarget(SA.target) or SA.target.Character then
+                woodieShootTarget67(SA.target)
+            end
+        end
+    end
+
+    woodieAutoShootTick = function(mode)
         local autoShoot = rGet("Silent Aim", "Auto Shoot", "Woodie Auto Shoot", true) == true
         local instaKill = rGet("Silent Aim", "Insta Kill", "Woodie Insta Kill", false) == true
         if not autoShoot and not instaKill then
@@ -21083,37 +21238,7 @@ function woodieRageInit67()
         if not SA.active then
             return
         end
-        if instaKill then
-            if mode == "target all" or mode == "auto select" then
-                local plr = closestToMouse()
-                if plr and plr.Parent and (plr.Character or SA.target == plr) then
-                    if validTarget(plr) or (SA.target == plr and plr.Character) then
-                        woodieShootTarget67(plr)
-                    end
-                end
-            elseif SA.target and SA.target.Parent then
-                if validTarget(SA.target) or SA.target.Character then
-                    woodieShootTarget67(SA.target)
-                end
-            end
-            return
-        end
-        local tool = equipShootTool()
-        if not tool then
-            return
-        end
-        local ammo = tool:FindFirstChild("Ammo")
-        if ammo and ammo.Value <= 0 then
-            return
-        end
-        woodiePatchFireRate67(tool)
-        if SA.target and SA.target.Parent and SA.target.Character then
-            local now = os.clock()
-            if now - woodieLastAutoActivate67 >= WOODIE_ACTIVATE_COOLDOWN67 then
-                woodieLastAutoActivate67 = now
-                pcall(function() tool:Activate() end)
-            end
-        end
+        woodieDirectShootTick(mode)
     end
 
     local function saTick()
@@ -21133,8 +21258,17 @@ function woodieRageInit67()
             if SA.active or SA.target then
                 clearTarget(true)
             end
+            SP = false
+            SP2 = false
+            if type(Mango) == "table" and type(Mango.Locals) == "table" then
+                Mango.Locals.SilentAimTarget = nil
+                Mango.Locals.LockedTarget = nil
+                Mango.Locals.HitPosition = nil
+                Mango.Locals.IsBoxFocused = false
+            end
             if typeof(getgenv) == "function" then
                 getgenv()._RainRageBotSA = { active = false, target = nil }
+                getgenv()._RainRageBotManualUntarget67 = true
             end
             updateTargetInfo()
             updateSpectate()
@@ -21688,7 +21822,7 @@ function woodieRageInit67()
     end
 
     local lastSaTick67 = 0
-    local SA_TICK_INTERVAL67 = 0
+    local SA_TICK_INTERVAL67 = 1 / 15
 
     trkConn(RS.Heartbeat:Connect(nv(function()
         if not rageBotOn67() then
@@ -22767,7 +22901,7 @@ function wbInit67()
     end
     local function preferHrp()
         if rainDaHoodInfRangeOn67() then
-            return holdingDhShot()
+            return holdingDhShot() or isDesHoodGame67()
         end
         return false
     end
@@ -22883,7 +23017,12 @@ function wbInit67()
         local oldShoot = infSt.oldShoot
         GunHandler.shoot = function(p)
             if rainDaHoodInfRangeOn67() and type(p) == "table" then
-                p.Range = math.huge
+                if isDesHoodGame67() then
+                    local tool = p.tool
+                    p.Range = desHoodToolRangeCap67(tool) or 95
+                else
+                    p.Range = math.huge
+                end
             end
             return oldShoot(p)
         end
@@ -22891,6 +23030,14 @@ function wbInit67()
     end
     local function startInfRange()
         if infSt.active then
+            return
+        end
+        hookGunHandler()
+        if isDesHoodGame67()
+            and type(CurrentGame) == "table"
+            and CurrentGame.UsesGunHandler == true
+        then
+            infSt.active = true
             return
         end
         if typeof(getrawmetatable) ~= "function"
@@ -22919,18 +23066,21 @@ function wbInit67()
             local method = getnamecallmethod()
             local args = { ... }
             if method == "FireServer" and self == MainEvent then
-                if isDesHoodGame67() then
-                    return oldNamecall(self, ...)
-                end
                 if args[1] == "ShootGun" and rainDaHoodInfRangeOn67() then
-                    pcall(function()
-                        if targetHitPart and targetPos then
-                            args[3] = targetPos + Vector3.new(0, 0, 1)
-                            args[4] = targetHitPart
-                            args[5] = targetPos
-                            args[6] = targetPos
-                        end
-                    end)
+                    if isDesHoodGame67() then
+                        pcall(function()
+                            desHoodInfRangePatchShootGun67(args, #args)
+                        end)
+                    else
+                        pcall(function()
+                            if targetHitPart and targetPos then
+                                args[3] = targetPos + Vector3.new(0, 0, 1)
+                                args[4] = targetHitPart
+                                args[5] = targetPos
+                                args[6] = targetPos
+                            end
+                        end)
+                    end
                     return oldNamecall(self, table.unpack(args))
                 end
                 if args[1] == "CheckPlayerClose" and rainDaHoodInfRangeOn67() then
@@ -22941,7 +23091,6 @@ function wbInit67()
             return oldNamecall(self, ...)
         end
         setreadonly(mt, true)
-        hookGunHandler()
         infSt.active = true
         if not infSt.ghModule then
             infSt.gunRetryThread = task.spawn(function()
@@ -23015,6 +23164,7 @@ function rngCh67()
         if not container then
             return
         end
+        local desHood = isDesHoodGame67()
         for _, tool in ipairs(container:GetChildren()) do
             if tool:IsA("Tool") then
                 local rv = tool:FindFirstChild("Range")
@@ -23022,7 +23172,14 @@ function rngCh67()
                     if rangeBackup[rv] == nil then
                         rangeBackup[rv] = rv.Value
                     end
-                    rv.Value = rangeVal
+                    local target = rangeVal
+                    if desHood then
+                        local cap = desHoodToolRangeCap67(tool)
+                        if cap then
+                            target = math.min(target, cap)
+                        end
+                    end
+                    rv.Value = target
                 end
             end
         end
@@ -28867,16 +29024,12 @@ function autoStomp67()
         if hrp then
             local hum = Self.Character:FindFirstChildOfClass("Humanoid")
             pcall(function()
-                if hum then hum.PlatformStand = true end
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
                 hrp.CFrame = StompDetect.savedPosition
                 if hum then
-                    hum.Health = hum.MaxHealth
+                    hum.PlatformStand = false
                 end
-            end)
-            task.defer(function()
-                if hum then hum.PlatformStand = false end
             end)
         end
     end
@@ -28916,6 +29069,13 @@ function autoStomp67()
 
     stompOnTorsoRemoved = function()
         if StompDetect.triggered then
+            return
+        end
+        local target = rageStompLock or autoStompTarget67()
+        if target and target.Character and targetIsKnockedQuick(target) and StompDetect.stompEngaged then
+            singleStompFired = false
+            singleStompAt = 0
+            task.defer(stompWatchTarget)
             return
         end
         if rageStompLock then
@@ -29406,9 +29566,15 @@ function autoStomp67()
             singleStompFireCount = 0
             stompFire67(target)
             singleStompFireCount = 1
+            return
+        end
+        local elapsed = tick() - singleStompAt
+        if elapsed >= 0.12 and singleStompFireCount < 4 and elapsed >= (0.12 * singleStompFireCount) then
+            singleStompFireCount = singleStompFireCount + 1
+            stompFire67(target)
         end
         local stompLanded = stompSucceededOnTarget(target)
-        if stompLanded or (tick() - singleStompAt) >= 0 then
+        if stompLanded or elapsed >= 0.4 then
             singleStompDone[target] = true
             rageStompLock = nil
             stompAcc = 0
@@ -30292,7 +30458,9 @@ refreshSilentAimHit67 = function()
     if selectAutomaticOn67() then
         local locked = Mango.Locals.LockedTarget or Mango.Locals.SilentAimTarget
         if locked and locked.Parent then
-            syncSelectAutomaticFlags67(Mango.Locals, locked)
+            if Mango.Locals.SilentAimTarget ~= locked or SP ~= true then
+                syncSelectAutomaticFlags67(Mango.Locals, locked)
+            end
         else
             Mango.Locals.SilentAimTarget = nil
             Mango.Locals.IsBoxFocused = false
@@ -30477,13 +30645,6 @@ local SilentAimKey = keyCd(silentAimKeybind67())
 local AimAssistKey = keyCd((shared.rain['Aim Assist'] and (shared.rain['Aim Assist'].Toggle or shared.rain['Aim Assist'].Keybind)) or "Z")
 local SelectKey = keyCd(selectKeybind67())
 local combatKeyHandled = false
-local tpAgmLive = shared.rain["Gun Mods"] and shared.rain["Gun Mods"]["Advanced Gun Mods"]
-local TpBulletKey = nil
-if type(tpAgmLive) == "table" and type(tpAgmLive["TP Bullet Toggle"]) == "string" then
-    pcall(function()
-        TpBulletKey = Enum.KeyCode[tpAgmLive["TP Bullet Toggle"]:upper()]
-    end)
-end
 
 local function combatLockOn()
     local locked = Player.GetClosestPlayerToCursor()
@@ -30568,39 +30729,6 @@ if not combatKeyHandled and not selectModeOn67() and AimAssistKey and Input.KeyC
     end
 end
 
-if not combatKeyHandled and TpBulletKey and Input.KeyCode == TpBulletKey
-    and type(tpAgmLive) == "table" and tpAgmLive["TP Bullet"] == true then
-    combatKeyHandled = true
-    local tpMode = tostring(tpAgmLive["TP Bullet Mode"] or "Target")
-    if tpMode == "Target" then
-        local wasLocked = (Mango.Locals.TpBulletLockedTarget ~= nil) or (SP == true)
-        if not wasLocked then
-            if not combatLockOn() then
-                combatLockOff()
-            end
-        else
-            combatLockOff()
-        end
-    else
-        local locked = Player.GetClosestPlayerToCursor()
-        if locked then
-            lockTgt(locked)
-            if shared.rain.SilentAim.Enabled then
-                SP = true
-            end
-            if shared.rain['Aim Assist'].Enabled and shared.rain['Aim Assist'].Sticky then
-                SP2 = true
-            end
-            if shared.rain.TriggerBot.Enabled then
-                Mango.Locals.TriggerState = true
-            end
-        else
-            combatLockOff()
-        end
-        syncTgt()
-    end
-end
-
 do
     local r = shared.rain.Rage
     if not combatKeyHandled and not Processed and rageVoidOn67() and rageVoidModeFromCfg67() == "Toggle" then
@@ -30618,22 +30746,6 @@ do
         if voidKeyMatch(Input, rageVoidKeybind67(), rageVoidInputFromCfg67()) then
             combatKeyHandled = true
             rageVoidFlipToggle67()
-        end
-    end
-end
-
-do
-    if not combatKeyHandled and hitExploitOn67() then
-        local toggleKb = hitExploitKeybind67()
-        local lockKb = hitExploitLockKeybind67()
-        local toggleKc = keyCd(toggleKb)
-        local lockKc = keyCd(lockKb)
-        if toggleKc and Input.KeyCode == toggleKc then
-            combatKeyHandled = true
-            hitExploitFlipToggle67()
-        elseif lockKc and Input.KeyCode == lockKc then
-            combatKeyHandled = true
-            hitExploitLockTarget67()
         end
     end
 end
@@ -30712,6 +30824,7 @@ end
     local FOV_FRAME_DT = 1 / 60
     local COMBAT_ACTIVE_DT = FOV_FRAME_DT
     local COMBAT_IDLE_DT = 1 / 10
+    local COMBAT_AUTO_LOCKED_DT = 1 / 15
     local function FullAutoUntarget()
         if selectAutomaticOn67() then
             return
@@ -30927,11 +31040,8 @@ end
 Utility.Connection(RunService.PreRender, LPH_NO_VIRTUALIZE(function()
     local nowCombat = os.clock()
     local frameDt = COMBAT_ACTIVE_DT
-    if selectAutomaticOn67()
-        and rainEnabled67("SilentAim.Enabled")
-        and not rainCombatHasTarget67()
-    then
-        frameDt = COMBAT_IDLE_DT
+    if selectAutomaticOn67() and rainEnabled67("SilentAim.Enabled") then
+        frameDt = rainCombatHasTarget67() and COMBAT_AUTO_LOCKED_DT or COMBAT_IDLE_DT
     end
     if nowCombat - combatFrameLast < frameDt then
         return
@@ -31204,24 +31314,42 @@ end))
                 end
                 return nil, nil
             end
+            -- GunClientShotgun uses getAim's 2nd return as an Instance (hit part).
+            -- Never replace that slot with a number — it errors
+            -- "Unable to cast value to Object".
+            local function ghApplyAimReturns67(packed, dir, mag, hitPos)
+                if typeof(dir) == "Vector3" then
+                    packed[1] = dir
+                    local second = packed[2]
+                    if type(second) == "number" or second == nil then
+                        packed[2] = mag
+                        if (packed.n or 0) < 2 then
+                            packed.n = 2
+                        end
+                    elseif typeof(second) == "Instance" then
+                        local part = type(hcResolveHitPart) == "function" and hcResolveHitPart(hitPos) or nil
+                        if part then
+                            packed[2] = part
+                        end
+                    end
+                end
+                return table.unpack(packed, 1, packed.n)
+            end
             local function ghGetAimWrap(a, b, ...)
                 local origin, rangeArg = ghGetAimOrigin(a, b)
-                local heDir, heRange = hitExploitGetAimDir67(origin, rangeArg)
-                if heDir then
-                    return heDir, heRange
-                end
-                if derHoodLockSa67() and saActive() and typeof(origin) == "Vector3" then
+                local packed = table.pack(oldGetAim(a, b, ...))
+                if derHoodLockSa67() and saActive() and typeof(origin) == "Vector3" and not hitExploitTpActive67() then
                     local dhHit = rainDerHoodSaHit67(origin, rangeArg)
                     if typeof(dhHit) == "Vector3" then
                         local d = dhHit - origin
                         local mag = d.Magnitude
                         if mag >= 1e-4 then
                             local cap = rangeArg or mag
-                            return d.Unit, math.min(mag, cap)
+                            return ghApplyAimReturns67(packed, d.Unit, math.min(mag, cap), dhHit)
                         end
                     end
                 end
-                if ghSaWants(origin) then
+                if ghSaWants(origin) and not hitExploitTpActive67() then
                     local hit = Mango.Locals.HitPosition
                     if Player and Player.GetHitPosition then
                         local live = Player.GetHitPosition("Silent")
@@ -31240,13 +31368,13 @@ end))
                     if cbmGh67() then
                         pcall(pushSrvHit, origin, capRange, hit, targetChar)
                         pcall(hookFs67)
-                        return oldGetAim(a, b, ...)
+                        return table.unpack(packed, 1, packed.n)
                     end
                     local d = hit - origin
                     local mag = d.Magnitude
                     if mag >= 1e-4 then
                         local cap = rangeArg or mag
-                        return d.Unit, math.min(mag, cap)
+                        return ghApplyAimReturns67(packed, d.Unit, math.min(mag, cap), hit)
                     end
                 end
                 if ghSprCur(origin) then
@@ -31256,11 +31384,11 @@ end))
                         local mag = d.Magnitude
                         if mag >= 1e-4 then
                             local cap = rangeArg or mag
-                            return d.Unit, math.min(mag, cap)
+                            return ghApplyAimReturns67(packed, d.Unit, math.min(mag, cap), aimWorld)
                         end
                     end
                 end
-                return oldGetAim(a, b, ...)
+                return table.unpack(packed, 1, packed.n)
             end
             oldGetAim = hookfunction(getAimFn, LPH_NO_VIRTUALIZE(ghGetAimWrap))
             gunHandler.GetAim = ghGetAimWrap
@@ -31300,9 +31428,6 @@ end))
                         end
                     end
                     spreadLocalShot = localShot(payload)
-                    if spreadLocalShot and hitExploitOn67() and hitExploitActive67() then
-                        pcall(hitExploitPatchShoot67, payload)
-                    end
                     if spreadLocalShot and typeof(payload.AimPosition) == "Vector3" then
                         ghSilentAim = payload.AimPosition
                     end
@@ -31311,14 +31436,24 @@ end))
                         Mango.Locals._RainSilentHitRoll = nil
                         hcEns()
                     end
-                    if spreadLocalShot and not cbmSplit() then
+                    if spreadLocalShot and not cbmSplit() and not hitExploitTpActive67() then
                         local saHit = ghSaRedir(payload)
                         if typeof(saHit) == "Vector3" then
                             ghApplySaHit(payload, saHit)
                             ghSilentAim = saHit
                         end
                     end
-                    if spreadLocalShot and cbmRedir(payload) then
+                    if spreadLocalShot
+                        and type(magicBulletOn67) == "function"
+                        and magicBulletOn67()
+                        and not hitExploitTpActive67()
+                    then
+                        pcall(magicBulletApplyPayload67, payload)
+                    end
+                    if spreadLocalShot and hitExploitTpActive67() then
+                        pcall(tpShoot67, payload)
+                    end
+                    if spreadLocalShot and cbmRedir(payload) and not hitExploitTpActive67() then
                         local shooter = payload.Shooter or (Self and Self.Character)
                         ownerName = shooter and shooter.Name
                         if ownerName then
@@ -31327,15 +31462,19 @@ end))
                     end
                 end
                 pcall(sprBeamMouse, payload)
-                pcall(tpShoot67, payload)
-                pcall(applyCbm, payload)
+                if type(payload) == "table" and not spreadLocalShot then
+                    pcall(tpShoot67, payload)
+                end
+                if not hitExploitTpActive67() then
+                    pcall(applyCbm, payload)
+                end
                 if spreadLocalShot and type(rainTrackGhPayloadForHit67) == "function" then
                     pcall(rainTrackGhPayloadForHit67, payload)
                 end
                 if type(payload) == "table" and typeof(ghSilentAim) ~= "Vector3" and typeof(payload.AimPosition) == "Vector3" then
                     ghSilentAim = payload.AimPosition
                 end
-                if not cbmGh67() and cbmRedir(payload) then
+                if not cbmGh67() and cbmRedir(payload) and not hitExploitTpActive67() then
                     ghLegitVisual = cbmVis(payload, ghSilentAim)
                     if typeof(ghLegitVisual) == "Vector3" then
                         payload.AimPosition = ghLegitVisual
@@ -31624,7 +31763,6 @@ end))
     rainBootFeature67(panicInit67)
     task.wait(0.1)
     rainBootFeature67(woodieRageInit67)
-    rainBootFeature67(hitExploitInit67)
     rainBootFeature67(rainAutoStimInit67)
     task.defer(function()
         pcall(hudKb67)
@@ -41268,8 +41406,6 @@ do
 		["Aim Assist.Keybind"] = true,
 		["TriggerBot.Toggle"] = true,
 		["Rage.Void Hide.Keybind"] = true,
-		["Rage.TP Bullet.Keybind"] = true,
-		["Rage.TP Bullet.Lock Keybind"] = true,
 		["Rage.Silent Aim.Keybind"] = true,
 		["Speed Modifiers.WalkSpeed.Keybind"] = true,
 		["Movement Extra.CFrame Fly.Keybind"] = true,
@@ -41505,8 +41641,6 @@ do
 		["Movement Extra.CFrame Fly.Mode"] = { "Toggle", "Hold" },
 		["Rage.Silent Aim.Mode"] = { "Sticky", "Switch" },
 		["Game Specific.Des Hood.Silent Aim.Mode"] = { "Sticky", "Switch" },
-		["Rage.TP Bullet.Bone"] = { "Head", "Torso", "HumanoidRootPart" },
-		["Game Specific.Des Hood.TP Bullet.Bone"] = { "Head", "Torso", "HumanoidRootPart" },
 		["Rage.Sentry.Mode"] = { "Self", "Player", "Both" },
 		["Game Specific.Des Hood.Sentry.Mode"] = { "Self", "Player", "Both" },
 		["Rage.Target Strafe.Preset"] = { "Top Strafe", "Bottom Strafe", "Spin", "Random" },
@@ -42105,7 +42239,7 @@ do
 		end
 
 		if parent == "Prediction" and (key == "X" or key == "Y" or key == "Z" or key == "Threshold") then
-			spec.min, spec.max, spec.decimals = 0, 1000, 3
+			spec.min, spec.max, spec.decimals = 0, 0.300, 3
 			return spec
 		end
 
@@ -43326,6 +43460,7 @@ do
 						},
 						{ name = "smoothing", side = 1, path = { "Aim Assist", "Smoothing" }, keys = { "Enabled", "Smoothness" } },
 						{ name = "prediction", side = 1, path = { "Aim Assist", "Prediction" }, keys = { "Enabled", "X", "Y", "Z" } },
+						{ name = "shake", side = 1, path = { "Aim Assist", "Shake" }, keys = { "Enabled", "X", "Y" } },
 						{ name = "fov", side = 2, path = { "Aim Assist", "FOV" } },
 						{
 							name = "nearest point",
@@ -43508,19 +43643,13 @@ do
 				{
 					name = "des hood",
 					sections = {
-						{ name = "inf ammo", side = 1, path = { "Game Specific", "Des Hood" }, keys = { "Inf Ammo" } },
+						{ name = "inf ammo", side = 1, path = { "Game Specific", "Des Hood" }, keys = { "Inf Ammo", "Bring Player" } },
 						{
 							name = "rage bot",
 							side = 1,
 							path = { "Game Specific", "Des Hood", "Silent Aim" },
 							prepend = { { path = { "Game Specific", "Des Hood", "Rage Bot" }, name = "rage bot" } },
 							keys = { "Mode", "Target Info", "Spectate", "Auto Shoot", "Insta Kill", "Knock Check", "Protected Check", "Keybind" },
-						},
-						{
-							name = "tp bullet",
-							side = 1,
-							path = { "Game Specific", "Des Hood", "TP Bullet" },
-							keys = { "Enabled", "Bone", "Highlight", "Keybind", "Lock Keybind" },
 						},
 						{
 							name = "stomp",
@@ -43539,16 +43668,6 @@ do
 							side = 2,
 							path = { "Game Specific", "Des Hood", "Sentry" },
 							keys = { "Enabled", "Mode", "Player" },
-						},
-						{
-							name = "value changer",
-							side = 2,
-							path = { "Game Specific", "Des Hood", "Value Changer" },
-							keys = { "Enabled", "Armor Value", "Muscle Value", "Apply Armor Keybind", "Apply Muscle Keybind" },
-							buttons = {
-								{ name = "apply armor", action = "desHoodApplyArmor67" },
-								{ name = "apply muscle", action = "desHoodApplyMuscle67" },
-							},
 						},
 						{
 							name = "kill all",
