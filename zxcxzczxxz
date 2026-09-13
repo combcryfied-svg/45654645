@@ -196,8 +196,7 @@ do
 end
 
 -- Keep menu disabled even if body later reads shared.rain.UI
-rainWebForceNoUI()
-do
+rainWebForceNoUI()do
     -- Adonis bypass must never hard-crash the script (nil typeof/table.find/getgc on some executors).
     local okType = typeof or type
     local function tableFind(t, value)
@@ -814,12 +813,12 @@ function norm67()
         }) do
             migrateToGsDh(key)
         end
+        local gmEarly = shared.rain["Gun Mods"]
         gsDhDes["Inf Range"] = nil
         gsDhDes["Force Hit"] = nil
         gsDhDes["Value Changer"] = nil
         gsDhDes["TP Bullet"] = nil
         gsDhDes["Hit Exploit"] = nil
-        local gmEarly = shared.rain["Gun Mods"]
         if gsDhDes["Inf Ammo"] == nil and type(gmEarly) == "table" and gmEarly["Inf Ammo"] ~= nil then
             gsDhDes["Inf Ammo"] = gmEarly["Inf Ammo"]
         end
@@ -2544,6 +2543,13 @@ function syncSelectMode67(mode)
             Mango.Locals.SelectEngaged = false
         end
         pcall(clrLock)
+        local sa = r.SilentAim
+        if type(sa) == "table" and sa.Enabled == true then
+            SP = true
+        end
+        if type(syncSelectAutomatic67) == "function" then
+            pcall(syncSelectAutomatic67, true)
+        end
     end
 end
 
@@ -2569,6 +2575,11 @@ function saLocked()
             local tgt = m.LockedTarget or m.SilentAimTarget
             return tgt ~= nil and tgt.Parent ~= nil
         end
+        return false
+    end
+    local tgt = m.SilentAimTarget or m.LockedTarget
+    if tgt and tgt.Parent then
+        return m.IsBoxFocused == true or saFovWide67() or SP == true
     end
     return false
 end
@@ -3596,31 +3607,31 @@ function rainSyncRuntimeFromConfig67()
             end
         end
     end
-    SP = false
-    SP2 = false
+    local saOn = type(r.SilentAim) == "table" and r.SilentAim.Enabled == true
+    local aaOn = type(r["Aim Assist"]) == "table" and r["Aim Assist"].Enabled == true
+    local tbOn = type(r.TriggerBot) == "table" and r.TriggerBot.Enabled == true
     if type(Mango) == "table" and type(Mango.Locals) == "table" then
         local m = Mango.Locals
-        m.SelectEngaged = false
-        m.TriggerState = false
         m.IsWalkSpeeding = false
         m.IsTriggerBotting = false
-        local saOn = type(r.SilentAim) == "table" and r.SilentAim.Enabled == true
-        local aaOn = type(r["Aim Assist"]) == "table" and r["Aim Assist"].Enabled == true
-        local tbOn = type(r.TriggerBot) == "table" and r.TriggerBot.Enabled == true
         if not saOn and not rageBotActive then
+            SP = false
             m.SilentAimTarget = nil
             m.HitPosition = nil
             m.IsBoxFocused = false
         end
         if not aaOn then
+            SP2 = false
             m.AimAssistTarget = nil
             m.CamlockTarget = nil
         end
         if not tbOn then
             m.TriggerbotTarget = nil
             m.HitTrigger = nil
+            m.TriggerState = false
         end
         if not saOn and not aaOn and not tbOn and not rageBotActive then
+            m.SelectEngaged = false
             if type(clrAim) == "function" then
                 pcall(clrAim)
             end
@@ -3635,6 +3646,11 @@ function rainSyncRuntimeFromConfig67()
             m.SilentAimTarget = rageBotTarget
             m.LockedTarget = rageBotTarget
             SP = true
+        elseif selectAutomaticOn67() and saOn then
+            SP = true
+            if type(syncSelectAutomatic67) == "function" then
+                pcall(syncSelectAutomatic67, true)
+            end
         end
     end
     if type(clearSaBodyLock67) == "function" then
@@ -4524,6 +4540,7 @@ function rainTapsBuildShootPayload67(tool, char, basePayload)
     if not tRange and tool.GetAttribute then
         tRange = tonumber(tool:GetAttribute("Range")) or 200
     end
+    -- Minimal payload only: ghShootWrap applies SA / CBM and resolves server hit per shot.
     return {
         Shooter = char,
         Handle = handle,
@@ -5720,7 +5737,6 @@ end
 
 VOID_Y_THRESHOLD67 = 1e9
 
-
 function hitExploitOn67()
     return false
 end
@@ -5749,7 +5765,6 @@ end
 
 function hitExploitInit67()
 end
-
 
 function rageVoidActive67()
     local ml = Mango and Mango.Locals
@@ -6807,7 +6822,7 @@ function hcRedirectPos()
     then
         return nil
     end
-    if not (type(shared.rain) == "table" and type(shared.rain.SilentAim) == "table" and shared.rain.SilentAim.Enabled == true) then
+    if not shared.rain.SilentAim.Enabled then
         return nil
     end
     local aimPlayer = getSaPlr()
@@ -6850,6 +6865,7 @@ function hcApplyMouseRedirect()
     local now = os.clock()
     local dt = tonumber(MOUSE_UPDATER_DT) or (1 / 12)
     if (now - (rainHcMouseFireLast67 or 0)) < dt then
+        -- Still sync local MousePos cheaply; skip FireServer spam.
         if Self and Self.Character then
             pcall(function()
                 local mousePos = Self.Character:FindFirstChild("BodyEffects")
@@ -7319,7 +7335,6 @@ function hcPatchShootPayload(payload)
     end
     if aimPlayer then
         for _, key in ipairs({ "CanHitPlayer", "Player", "TargetPlayer", "Victim" }) do
-            -- Never overwrite booleans with a Player (causes "Unable to cast Instance to bool").
             local cur = payload[key]
             if typeof(cur) == "Instance" or type(cur) == "userdata" then
                 payload[key] = aimPlayer
@@ -7600,7 +7615,18 @@ function rainInstallBoolCastGuard67()
         }
         local oldNewIndex
         oldNewIndex = hookmetamethod(game, "__newindex", LPH_NO_VIRTUALIZE(function(self, key, value)
-            if typeof(value) == "Instance" then
+            if key == "Value" and typeof(self) == "Instance" and self:IsA("ObjectValue") then
+                if value ~= nil and typeof(value) ~= "Instance" then
+                    if self.Name == "Lock"
+                        and typeof(rainSaLockPart67) == "Instance"
+                        and rainSaLockPart67.Parent
+                    then
+                        value = rainSaLockPart67
+                    else
+                        return
+                    end
+                end
+            elseif typeof(value) == "Instance" then
                 if key == "Value" and typeof(self) == "Instance" and self:IsA("BoolValue") then
                     value = true
                 elseif type(key) == "string" and BOOL_PROPS[key] then
@@ -7631,6 +7657,19 @@ function rainHookHcMouse67()
         return type(shared.rain) == "table"
             and type(shared.rain.SilentAim) == "table"
             and shared.rain.SilentAim.Enabled == true
+    end
+    local hcMouseResolveDepth67 = 0
+    local function hcMouseIndexWrap(self, key, oldIndex)
+        if hcMouseResolveDepth67 > 0 then
+            return oldIndex(self, key)
+        end
+        hcMouseResolveDepth67 = hcMouseResolveDepth67 + 1
+        local ok, result = pcall(hcMouseResolve, self, key, oldIndex)
+        hcMouseResolveDepth67 = hcMouseResolveDepth67 - 1
+        if ok then
+            return result
+        end
+        return oldIndex(self, key)
     end
     local function hcMouseResolve(self, key, oldIndex)
         if self ~= Mouse or type(key) ~= "string" then
@@ -7671,7 +7710,7 @@ function rainHookHcMouse67()
         local oldIdx = mt.__index
         setreadonly(mt, false)
         mt.__index = LPH_NO_VIRTUALIZE(function(self, key)
-            return hcMouseResolve(self, key, oldIdx)
+            return hcMouseIndexWrap(self, key, oldIdx)
         end)
         setreadonly(mt, true)
         Mango._RainHcMouseHookKind = "raw"
@@ -7681,7 +7720,7 @@ function rainHookHcMouse67()
         pcall(function()
             local oldMouseIndex
             oldMouseIndex = hookmetamethod(Mouse, "__index", LPH_NO_VIRTUALIZE(function(self, key)
-                return hcMouseResolve(self, key, oldMouseIndex)
+                return hcMouseIndexWrap(self, key, oldMouseIndex)
             end))
             if oldMouseIndex then
                 Mango._RainHcMouseHookKind = "hmm"
@@ -7699,7 +7738,7 @@ function rainHookHcMouse67()
             setreadonly(grm, false)
             grm.__index = LPH_NO_VIRTUALIZE(function(self, key)
                 if self == Mouse and key == "Hit" then
-                    return hcMouseResolve(self, key, oldGameIndex)
+                    return hcMouseIndexWrap(self, key, oldGameIndex)
                 end
                 return oldGameIndex(self, key)
             end)
@@ -7943,7 +7982,7 @@ Mango = {
         NameESP = {},
     }
 }
-if not (type(shared.rain.SilentAim) == "table" and shared.rain.SilentAim.Enabled) then
+if not shared.rain.SilentAim.Enabled then
     clrAim()
 end
 rainSyncNameEspActive67()
@@ -8166,7 +8205,7 @@ Games = {
             end,
         },
     },
-    [10765931744] = {
+    [10765591377] = {
         Name = 'Das Hood',
         Updater = 'UpdateMousePos',
         HoodGame = true,
@@ -8392,8 +8431,11 @@ if not Games[game.PlaceId] and Games[game.GameId] then
     Games[game.PlaceId] = Games[game.GameId]
 end
 
-if Games[10765129399] and not Games[96247461091106] then
-    Games[96247461091106] = Games[10765129399]
+if Games[10765980155] and not Games[10765129399] then
+    Games[10765129399] = Games[10765980155]
+end
+if Games[10765980155] and not Games[96247461091106] then
+    Games[96247461091106] = Games[10765980155]
 end
 
 CurrentGame = Games[game.GameId] or Games[game.PlaceId] or {
@@ -10165,10 +10207,27 @@ end
             end
 
             local function IsKnocked(Character)
-                if (Character) and Character:FindFirstChild('BodyEffects') then
-                    return Character:FindFirstChild("BodyEffects")['K.O'].Value
+                if not Character then
+                    return false
                 end
-                return false
+                if type(CurrentGame) == "table"
+                    and type(CurrentGame.Functions) == "table"
+                    and type(CurrentGame.Functions.KnockedFunction) == "function"
+                then
+                    local plr = Players:GetPlayerFromCharacter(Character)
+                    if plr then
+                        local ok, knocked = pcall(CurrentGame.Functions.KnockedFunction, plr)
+                        if ok then
+                            return knocked == true
+                        end
+                    end
+                end
+                local be = Character:FindFirstChild("BodyEffects")
+                if not be then
+                    return false
+                end
+                local ko = be:FindFirstChild("K.O.") or be:FindFirstChild("K.O") or be:FindFirstChild("Knocked")
+                return ko and ko:IsA("BoolValue") and ko.Value == true
             end
 
             local function IsGrabbed(Character)
@@ -10330,8 +10389,8 @@ end
                         local pos, onScreen = camera:WorldToViewportPoint(part.Position)
                         if onScreen and pos.Z > 0 then
                             local dist = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
-                            if dist < best then
-                                best = dist
+                    if dist < best then
+                            best = dist
                             end
                         end
                     end
@@ -12992,6 +13051,9 @@ end
                 if rainSelfKnocked67() then
                     return
                 end
+                if selectAutomaticOn67() then
+                    return
+                end
                 local nowAa = os.clock()
                 local char = Self.Character
                 if not char or not char:FindFirstChildOfClass("Tool") then
@@ -13283,6 +13345,9 @@ function saLockOn67()
 end
 
 function saLockOff67()
+    if selectAutomaticOn67() then
+        return
+    end
     SP = false
     Mango.Locals.SilentAimTarget = nil
     if not selectHasTarget67() and not SP2 then
@@ -15519,6 +15584,7 @@ function desHoodApplyCharacterTp67(cf)
         if hum then
             hum.PlatformStand = false
         end
+        -- Keep physics awake so the server replicates the new CFrame.
         rootPart.AssemblyLinearVelocity = Vector3.new(0.08, 0.02, 0.08)
         rootPart.AssemblyAngularVelocity = Vector3.zero
         if typeof(char.PivotTo) == "function" then
@@ -20186,7 +20252,7 @@ function woodieShootTarget67(player)
     if g then
         g._RainRageBotFiring67 = true
     end
-    local ok = pcall(function()
+    local ok, err = pcall(function()
         if type(Mango) == "table"
             and type(Mango._RainHcOldFireServer) == "function"
             and type(rainDispatchFireServer67) == "function"
@@ -29875,7 +29941,7 @@ function buyArmor67()
                 return true
             end
         end
-        if game.GameId == 10725680211 or game.GameId == 1008451066 or game.GameId == 10537905600 or game.GameId == 10764730172 or game.GameId == 10765129399 then
+        if game.GameId == 10725680211 or game.GameId == 1008451066 or game.GameId == 10537905600 or game.GameId == 10764730172 or game.GameId == 10765129399 or game.GameId == 10765980155 then
             return true
         end
         local shop = getShopFolder()
@@ -30697,8 +30763,8 @@ if selectModeOn67() and SelectKey and Input.KeyCode == SelectKey then
     end
 end
 
-if not combatKeyHandled and SilentAimKey and Input.KeyCode == SilentAimKey and shared.rain.SilentAim.Enabled
-    and not (selectModeOn67() and SelectKey and SilentAimKey == SelectKey) then
+if not combatKeyHandled and selectModeOn67() and SilentAimKey and Input.KeyCode == SilentAimKey and shared.rain.SilentAim.Enabled
+    and not (SelectKey and SilentAimKey == SelectKey) then
     combatKeyHandled = true
     if SP and Mango.Locals.SilentAimTarget and Mango.Locals.SilentAimTarget.Parent then
         saLockOff67()
@@ -31059,6 +31125,12 @@ Utility.Connection(RunService.PreRender, LPH_NO_VIRTUALIZE(function()
 
     local hasTarget = rainCombatHasTarget67()
     if not hasTarget and selectAutomaticOn67() and rainEnabled67("SilentAim.Enabled") then
+        pcall(function()
+            if type(Main) == "table" and type(Main.UpdateBox) == "function" then
+                Main.UpdateBox()
+            end
+        end)
+        syncTgt()
         refreshSilentAimHit67()
         return
     end
@@ -31248,6 +31320,9 @@ end))
     end
 
     local function ghSaWants(origin)
+        if type(derHoodLockSa67) == "function" and derHoodLockSa67() then
+            return false
+        end
         if not ghFlow67() then
             return false
         end
@@ -31321,34 +31396,25 @@ end))
                 if typeof(dir) == "Vector3" then
                     packed[1] = dir
                     local second = packed[2]
-                    if type(second) == "number" or second == nil then
-                        packed[2] = mag
-                        if (packed.n or 0) < 2 then
-                            packed.n = 2
-                        end
-                    elseif typeof(second) == "Instance" then
+                    if typeof(second) == "Instance" then
                         local part = type(hcResolveHitPart) == "function" and hcResolveHitPart(hitPos) or nil
                         if part then
                             packed[2] = part
                         end
+                    elseif type(second) == "number" then
+                        packed[2] = mag
                     end
                 end
                 return table.unpack(packed, 1, packed.n)
             end
             local function ghGetAimWrap(a, b, ...)
                 local origin, rangeArg = ghGetAimOrigin(a, b)
-                local packed = table.pack(oldGetAim(a, b, ...))
                 if derHoodLockSa67() and saActive() and typeof(origin) == "Vector3" and not hitExploitTpActive67() then
-                    local dhHit = rainDerHoodSaHit67(origin, rangeArg)
-                    if typeof(dhHit) == "Vector3" then
-                        local d = dhHit - origin
-                        local mag = d.Magnitude
-                        if mag >= 1e-4 then
-                            local cap = rangeArg or mag
-                            return ghApplyAimReturns67(packed, d.Unit, math.min(mag, cap), dhHit)
-                        end
-                    end
+                    pcall(syncSaBodyLock67, true)
+                    local packedLock = table.pack(oldGetAim(a, b, ...))
+                    return table.unpack(packedLock, 1, packedLock.n)
                 end
+                local packed = table.pack(oldGetAim(a, b, ...))
                 if ghSaWants(origin) and not hitExploitTpActive67() then
                     local hit = Mango.Locals.HitPosition
                     if Player and Player.GetHitPosition then
@@ -43035,6 +43101,9 @@ do
 		local rank = {
 			Enabled = 10,
 			["Rage Bot"] = 11,
+			["Range Modifier"] = 33,
+			["Fire Rate"] = 34,
+			["Inf Range"] = 35,
 			Toggle = 20,
 			Input = 21,
 			Keybind = 22,
@@ -43649,7 +43718,7 @@ do
 							side = 1,
 							path = { "Game Specific", "Des Hood", "Silent Aim" },
 							prepend = { { path = { "Game Specific", "Des Hood", "Rage Bot" }, name = "rage bot" } },
-							keys = { "Mode", "Target Info", "Spectate", "Auto Shoot", "Insta Kill", "Knock Check", "Protected Check", "Keybind" },
+							keys = { "Mode", "Target Info", "Spectate", "Auto Shoot", "Insta Kill", "Knock Check", "Protected Check", "Range Modifier", "Fire Rate", "Inf Range", "Keybind" },
 						},
 						{
 							name = "stomp",
