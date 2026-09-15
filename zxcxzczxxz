@@ -12,6 +12,15 @@ if typeof(getgenv) == "function" then
 	-- rainweb never loads the in-game menu UI
 	g.RainTableNoUI = true
 	g._RAIN_LOAD_UI = false
+	local lk = g.LOADER_KEY
+	if (type(lk) ~= "string" or lk == "") and type(LOADER_KEY) == "string" then
+		lk = LOADER_KEY
+	end
+	if type(lk) == "string" and lk ~= "" then
+		g.LOADER_KEY = lk
+		g.RAIN_LOADER_KEY = lk
+	end
+	g.RAIN_LOADER_KEY = g.RAIN_LOADER_KEY or ""
 end
 
 script_key = (typeof(getgenv) == "function" and getgenv().script_key) or script_key or "place ur key here"
@@ -85,9 +94,15 @@ do
 		base = "https://getrain.club"
 	end
 	local mode = tostring(g.RAIN_WEB_MODE or "rage")
-	local key = tostring(g.script_key or script_key or "")
-	if key == "place ur key here" or key == "place your key here" then
-		key = ""
+	local key = tostring(g.RAIN_LOADER_KEY or g.LOADER_KEY or "")
+	if (key == "" or key == "nil") and type(LOADER_KEY) == "string" then
+		key = LOADER_KEY
+	end
+	if key == "" or key == "nil" then
+		key = tostring(g.script_key or script_key or "")
+		if key == "place ur key here" or key == "place your key here" then
+			key = ""
+		end
 	end
 
 	if key ~= "" and key ~= "nil" then
@@ -182,7 +197,7 @@ do
 			end
 		end)
 	else
-		warn("[Rain Web] No script_key — save your luarmor key on the dashboard (Account), then use the loader snippet")
+		warn("[Rain Web] No LOADER_KEY - set it from the dashboard loader snippet, or getgenv().LOADER_KEY")
 	end
 end
 
