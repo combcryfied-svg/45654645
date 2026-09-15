@@ -12,18 +12,9 @@ if typeof(getgenv) == "function" then
 	-- rainweb never loads the in-game menu UI
 	g.RainTableNoUI = true
 	g._RAIN_LOAD_UI = false
-	local lk = g.LOADER_KEY
-	if (type(lk) ~= "string" or lk == "") and type(LOADER_KEY) == "string" then
-		lk = LOADER_KEY
-	end
-	if type(lk) == "string" and lk ~= "" then
-		g.LOADER_KEY = lk
-		g.RAIN_LOADER_KEY = lk
-	end
-	g.RAIN_LOADER_KEY = g.RAIN_LOADER_KEY or ""
 end
 
-script_key = (typeof(getgenv) == "function" and getgenv().script_key) or "place ur key here"
+script_key = (typeof(getgenv) == "function" and getgenv().script_key) or script_key or "place ur key here"
 
 -- Empty on purpose: website injects/fills shared.rain
 shared.rain = {}
@@ -94,9 +85,9 @@ do
 		base = "https://getrain.club"
 	end
 	local mode = tostring(g.RAIN_WEB_MODE or "rage")
-	local key = tostring(g.RAIN_LOADER_KEY or g.LOADER_KEY or "")
-	if (key == "" or key == "nil") and type(LOADER_KEY) == "string" then
-		key = LOADER_KEY
+	local key = tostring(g.script_key or script_key or "")
+	if key == "place ur key here" or key == "place your key here" then
+		key = ""
 	end
 
 	if key ~= "" and key ~= "nil" then
@@ -191,7 +182,7 @@ do
 			end
 		end)
 	else
-		warn("[Rain Web] No LOADER_KEY - set it from the dashboard loader snippet, or getgenv().LOADER_KEY")
+		warn("[Rain Web] No script_key — save your luarmor key on the dashboard (Account), then use the loader snippet")
 	end
 end
 
@@ -816,7 +807,9 @@ function norm67()
         local gmEarly = shared.rain["Gun Mods"]
         gsDhDes["Inf Range"] = nil
         gsDhDes["Force Hit"] = nil
-        gsDhDes["Value Changer"] = nil
+        if type(rageTbl["Value Changer"]) == "table" and gsDhDes["Value Changer"] == nil then
+            gsDhDes["Value Changer"] = rageTbl["Value Changer"]
+        end
         gsDhDes["TP Bullet"] = nil
         gsDhDes["Hit Exploit"] = nil
         if gsDhDes["Inf Ammo"] == nil and type(gmEarly) == "table" and gmEarly["Inf Ammo"] ~= nil then
@@ -1287,7 +1280,30 @@ function norm67()
     end
     grc.Enabled = grc.Enabled == true
     grc.Range = rainNormGunRange67(grc.Range, 1000)
-    grc["ApplyTo"] = nil
+    local applyTo = grc["ApplyTo"]
+    if type(applyTo) ~= "table" then
+        applyTo = {}
+    else
+        local cleaned = {}
+        for i = 1, #applyTo do
+            local name = applyTo[i]
+            if type(name) == "string" and name ~= "" then
+                cleaned[#cleaned + 1] = name
+            end
+        end
+        applyTo = cleaned
+    end
+    grc["ApplyTo"] = applyTo
+    for _, gunName in ipairs(DH_GUN_NAMES67 or {}) do
+        local entry = grc[gunName]
+        if type(entry) == "number" then
+            grc[gunName] = { Value = entry }
+            entry = grc[gunName]
+        end
+        if type(entry) == "table" and entry.Value ~= nil then
+            entry.Value = rainNormGunRange67(entry.Value, grc.Range)
+        end
+    end
     local dc = gm and gm["Delay Changer"]
     if type(dc) ~= "table" then
         dc = { Enabled = false, Weapons = {} }
@@ -1446,14 +1462,26 @@ function norm67()
     end
     agm["Force Hit"] = agm["Force Hit"] == true
     agm["Magic Bullet"] = nil
-    local legacyDmgOver = gm and gm["Damage Overrider"]
-    if type(legacyDmgOver) == "table" and legacyDmgOver.Enabled == true then
-        agm["Damage Overrider"] = true
+    local dmgOver = gm and gm["Damage Overrider"]
+    if type(dmgOver) ~= "table" then
+        dmgOver = { Enabled = false, Config = "Full" }
+        if type(gm) == "table" then
+            gm["Damage Overrider"] = dmgOver
+        end
     end
-    agm["Damage Overrider"] = agm["Damage Overrider"] == true
-    if type(gm) == "table" then
-        gm["Damage Overrider"] = nil
+    if type(agm) == "table" and agm["Damage Overrider"] == true then
+        dmgOver.Enabled = true
+        agm["Damage Overrider"] = nil
     end
+    dmgOver.Enabled = dmgOver.Enabled == true
+    local dmgCfg = tostring(dmgOver.Config or "Full")
+    if dmgCfg == "Max" or dmgCfg == "max" then
+        dmgCfg = "Full"
+    end
+    if dmgCfg ~= "Full" and dmgCfg ~= "Half" and dmgCfg ~= "Low" then
+        dmgCfg = "Full"
+    end
+    dmgOver.Config = dmgCfg
     if type(gm) == "table" then
         gm.Taps = nil
     end
@@ -1607,6 +1635,36 @@ function norm67()
     local playerRoot = type(shared.rain.Player) == "table" and shared.rain.Player or {}
     local dhKill = type(dhRoot["Kill All"]) == "table" and dhRoot["Kill All"]
         or type(rage["Kill All"]) == "table" and rage["Kill All"] or {}
+    local dhVC = type(dhRoot["Value Changer"]) == "table" and dhRoot["Value Changer"]
+        or type(playerRoot["Value Changer"]) == "table" and playerRoot["Value Changer"]
+        or type(rage["Value Changer"]) == "table" and rage["Value Changer"]
+        or type(dhRoot["Fun Edits"]) == "table" and dhRoot["Fun Edits"] or {}
+    local function dhAmountSetting(raw, defaultAmount)
+        defaultAmount = tostring(defaultAmount or "9e9")
+        if raw == true then
+            return "9e9"
+        end
+        if raw == false then
+            return "0"
+        end
+        if type(raw) == "number" then
+            return raw == 0 and "0" or tostring(raw)
+        end
+        if type(raw) == "string" then
+            local lower = string.lower(raw)
+            if lower == "true" then
+                return "9e9"
+            end
+            if lower == "false" then
+                return "0"
+            end
+            if raw == "" then
+                return defaultAmount
+            end
+            return raw
+        end
+        return defaultAmount
+    end
     local function dhPick(flat, nestTbl, nestKey, legacy)
         if dhRoot[flat] ~= nil then
             return dhRoot[flat]
@@ -1689,6 +1747,16 @@ function norm67()
     if type(rage["Kill All"]) == "table" then
         rage["Kill All"]["Actions"] = dhKill["Actions"]
     end
+    local dhValueChanger = {
+        ["Enabled"] = dhPick("Value Changer Enabled", dhVC, "Enabled", true) == true,
+        ["Armor Value"] = dhAmountSetting(dhPick("Armor Value", dhVC, "Armor Value", "9e9"), "9e9"),
+        ["Muscle Value"] = dhAmountSetting(dhPick("Muscle Value", dhVC, "Muscle Value", "150000"), "150000"),
+        ["Apply Armor Keybind"] = tostring(dhPick("Apply Armor Keybind", dhVC, "Apply Armor Keybind", "")),
+        ["Apply Muscle Keybind"] = tostring(dhPick("Apply Muscle Keybind", dhVC, "Apply Muscle Keybind", "J")),
+    }
+    if type(dhVC) == "table" and type(dhVC["Actions"]) == "table" then
+        dhValueChanger["Actions"] = dhVC["Actions"]
+    end
     if type(playerRoot) == "table" then
         playerRoot["Value Changer"] = nil
         shared.rain.Player = playerRoot
@@ -1702,7 +1770,7 @@ function norm67()
     dhRoot["Auto Stim"] = rage["Auto Stim"]
     dhRoot["Sentry"] = rage["Sentry"]
     dhRoot["Kill All"] = rage["Kill All"]
-    dhRoot["Value Changer"] = nil
+    dhRoot["Value Changer"] = dhValueChanger
     dhRoot["Fun Edits"] = nil
     dhRoot["Inf Ammo"] = gm["Inf Ammo"]
     dhRoot["Misc"] = nil
@@ -2377,6 +2445,8 @@ function syncKeybindsPanelFromFeatures67()
         "Kill All",
         "Kill All On Respawn",
         "Kill All Loop",
+        "Apply Armor",
+        "Apply Muscle",
     }
     for i = 1, #dhKeyNames do
         local name = dhKeyNames[i]
@@ -2421,8 +2491,9 @@ function syncKeybindsPanelFromFeatures67()
     dhKb["Kill All"] = tostring(type(dhKill) == "table" and dhKill.Keybind or dhKb["Kill All"] or "K")
     dhKb["Kill All On Respawn"] = tostring(type(dhKill) == "table" and dhKill["On Respawn Keybind"] or dhKb["Kill All On Respawn"] or "")
     dhKb["Kill All Loop"] = tostring(type(dhKill) == "table" and dhKill["Loop Keybind"] or dhKb["Kill All Loop"] or "")
-    dhKb["Apply Armor"] = nil
-    dhKb["Apply Muscle"] = nil
+    local dhVC = dh["Value Changer"]
+    dhKb["Apply Armor"] = tostring(type(dhVC) == "table" and dhVC["Apply Armor Keybind"] or dhKb["Apply Armor"] or "")
+    dhKb["Apply Muscle"] = tostring(type(dhVC) == "table" and dhVC["Apply Muscle Keybind"] or dhKb["Apply Muscle"] or "J")
 end
 
 function applyKeybindPanelField67(panelKey, keyName, scope)
@@ -2480,6 +2551,15 @@ function applyKeybindPanelField67(panelKey, keyName, scope)
                 rage["Kill All"] = type(rage["Kill All"]) == "table" and rage["Kill All"] or {}
                 rage["Kill All"][field] = keyName
             end
+            return
+        end
+        if panelKey == "Apply Armor" or panelKey == "Apply Muscle" then
+            local field = panelKey == "Apply Armor" and "Apply Armor Keybind" or "Apply Muscle Keybind"
+            local dh = r["Game Specific"]["Des Hood"]
+            dh["Value Changer"] = type(dh["Value Changer"]) == "table" and dh["Value Changer"] or {}
+            dh["Value Changer"][field] = keyName
+            dh.Keybinds = type(dh.Keybinds) == "table" and dh.Keybinds or {}
+            dh.Keybinds[panelKey] = keyName
             return
         end
         return
@@ -3740,6 +3820,9 @@ function rainApplyLiveConfig67()
     if type(g._RainInvalidatePanelLayout67) == "function" then
         pcall(g._RainInvalidatePanelLayout67)
     end
+    if type(g._RainForceGunRangeSync67) == "function" then
+        pcall(g._RainForceGunRangeSync67)
+    end
     if type(g._RainVoidHideSync67) == "function" then
         pcall(g._RainVoidHideSync67)
     end
@@ -4208,43 +4291,37 @@ function magicBulletPatchShootArgs67(args, argc)
     return false
 end
 
+function damageOverriderCfg67()
+    local gm = shared.rain and shared.rain["Gun Mods"]
+    return gm and gm["Damage Overrider"]
+end
+
 function damageOverriderOn67()
+    local cfg = damageOverriderCfg67()
+    if type(cfg) == "table" and cfg.Enabled == true then
+        return true
+    end
     local gm = shared.rain and shared.rain["Gun Mods"]
     local agm = gm and gm["Advanced Gun Mods"]
     return type(agm) == "table" and agm["Damage Overrider"] == true
 end
 
-local DAMAGE_OVERRIDER_BODY67 = {
-    HumanoidRootPart = true,
-    UpperTorso = true,
-    LowerTorso = true,
-    Torso = true,
-    LeftUpperArm = true,
-    RightUpperArm = true,
-    LeftLowerArm = true,
-    RightLowerArm = true,
-    LeftHand = true,
-    RightHand = true,
-    LeftUpperLeg = true,
-    RightUpperLeg = true,
-    LeftLowerLeg = true,
-    RightLowerLeg = true,
-    LeftFoot = true,
-    RightFoot = true,
-    ["Left Arm"] = true,
-    ["Right Arm"] = true,
-    ["Left Leg"] = true,
-    ["Right Leg"] = true,
-}
+function damageOverriderMode67()
+    local cfg = damageOverriderCfg67()
+    local mode = type(cfg) == "table" and tostring(cfg.Config or cfg.Mode or "") or ""
+    mode = string.lower(mode)
+    if mode == "max" or mode == "full" or mode == "head" then
+        return "Full"
+    elseif mode == "half" or mode == "torso" or mode == "body" then
+        return "Half"
+    elseif mode == "low" or mode == "limbs" or mode == "limb" then
+        return "Low"
+    end
+    return "Full"
+end
 
-function damageOverriderHeadFromHit67(inst)
+function damageOverriderCharFromHit67(inst)
     if typeof(inst) ~= "Instance" then
-        return nil
-    end
-    if inst.Name == "Head" then
-        return nil
-    end
-    if not DAMAGE_OVERRIDER_BODY67[inst.Name] then
         return nil
     end
     local char = inst:FindFirstAncestorOfClass("Model")
@@ -4262,9 +4339,52 @@ function damageOverriderHeadFromHit67(inst)
     if Self and char == Self.Character then
         return nil
     end
-    local head = char:FindFirstChild("Head")
-    if head and head:IsA("BasePart") then
-        return head
+    return char
+end
+
+function damageOverriderPickPart67(char, mode)
+    if not char then
+        return nil
+    end
+    if mode == "Full" then
+        local head = char:FindFirstChild("Head")
+        if head and head:IsA("BasePart") then
+            return head
+        end
+        return nil
+    elseif mode == "Half" then
+        for _, name in ipairs({ "UpperTorso", "Torso", "LowerTorso", "HumanoidRootPart" }) do
+            local p = char:FindFirstChild(name)
+            if p and p:IsA("BasePart") then
+                return p
+            end
+        end
+        return nil
+    elseif mode == "Low" then
+        for _, name in ipairs({
+            "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm",
+            "LeftUpperLeg", "RightUpperLeg", "Left Arm", "Right Arm", "Left Leg", "Right Leg",
+        }) do
+            local p = char:FindFirstChild(name)
+            if p and p:IsA("BasePart") then
+                return p
+            end
+        end
+    end
+    return nil
+end
+
+function damageOverriderTargetFromHit67(inst, mode)
+    local char = damageOverriderCharFromHit67(inst)
+    if not char then
+        return nil
+    end
+    local target = damageOverriderPickPart67(char, mode)
+    if target then
+        return target
+    end
+    if inst:IsA("BasePart") then
+        return inst
     end
     return nil
 end
@@ -4288,11 +4408,11 @@ function damageOverriderSyncMouse67(headPos)
     end
 end
 
-function damageOverriderForceHeadArgs67(args, argc, head)
-    if type(args) ~= "table" or not head then
+function damageOverriderForceTargetArgs67(args, argc, targetPart)
+    if type(args) ~= "table" or not targetPart then
         return false
     end
-    local headPos = head.Position
+    local headPos = targetPart.Position
     local n = tonumber(argc) or (args.n or #args)
     local oldOrigin = args[3]
     if typeof(oldOrigin) == "Vector3" then
@@ -4325,8 +4445,8 @@ function damageOverriderForceHeadArgs67(args, argc, head)
                     pellet.AimPosition = headPos
                 end
                 if pellet.Result2 ~= nil or pellet.Hit ~= nil then
-                    pellet.Result2 = head
-                    pellet.Hit = head
+                    pellet.Result2 = targetPart
+                    pellet.Hit = targetPart
                 end
                 if pellet.Result3 ~= nil then
                     pellet.Result3 = norm
@@ -4335,13 +4455,13 @@ function damageOverriderForceHeadArgs67(args, argc, head)
         end
     elseif typeof(args[4]) == "Vector3" then
         args[4] = headPos
-        args[5] = head
+        args[5] = targetPart
         if n >= 6 then
             args[6] = norm
         end
     elseif args[4] == nil and typeof(args[5]) == "Vector3" then
         args[5] = headPos
-        args[6] = head
+        args[6] = targetPart
         if n >= 7 then
             args[7] = norm
         end
@@ -4356,26 +4476,26 @@ function damageOverriderForceHeadArgs67(args, argc, head)
     return true
 end
 
-function damageOverriderFindHeadInArgs67(args)
+function damageOverriderFindTargetInArgs67(args, mode)
     if type(args) ~= "table" then
         return nil
     end
     if type(args[4]) == "table" and type(args[4][1]) == "table" then
         for _, pellet in ipairs(args[4]) do
             if type(pellet) == "table" then
-                local head = damageOverriderHeadFromHit67(pellet.Result2 or pellet.Hit)
-                if head then
-                    return head
+                local target = damageOverriderTargetFromHit67(pellet.Result2 or pellet.Hit, mode)
+                if target then
+                    return target
                 end
             end
         end
         return nil
     end
     if typeof(args[4]) == "Vector3" then
-        return damageOverriderHeadFromHit67(args[5])
+        return damageOverriderTargetFromHit67(args[5], mode)
     end
     if args[4] == nil and typeof(args[5]) == "Vector3" then
-        return damageOverriderHeadFromHit67(args[6])
+        return damageOverriderTargetFromHit67(args[6], mode)
     end
     return nil
 end
@@ -4391,11 +4511,12 @@ function damageOverriderPatchShootArgs67(args, argc)
     if type(magicBulletOn67) == "function" and magicBulletOn67() then
         return false
     end
-    local head = damageOverriderFindHeadInArgs67(args)
-    if not head then
+    local mode = damageOverriderMode67()
+    local target = damageOverriderFindTargetInArgs67(args, mode)
+    if not target then
         return false
     end
-    return damageOverriderForceHeadArgs67(args, argc, head) == true
+    return damageOverriderForceTargetArgs67(args, argc, target) == true
 end
 
 function tapsCfg67()
@@ -5044,6 +5165,83 @@ function isGunDelayConstantUpvalue67(val, tool, stock)
         return true
     end
     return false
+end
+
+function findToolRangeValue67(tool)
+    if not tool then
+        return nil
+    end
+    local rv = tool:FindFirstChild("Range")
+    if rv and (rv:IsA("NumberValue") or rv:IsA("IntValue")) then
+        return rv
+    end
+    rv = tool:FindFirstChild("Range", true)
+    if rv and (rv:IsA("NumberValue") or rv:IsA("IntValue")) then
+        return rv
+    end
+    return nil
+end
+
+function readToolRangeNumber67(tool)
+    local rv = findToolRangeValue67(tool)
+    local n = rv and tonumber(rv.Value)
+    if (not n or n <= 0) and tool and tool.GetAttribute then
+        n = tonumber(tool:GetAttribute("Range"))
+    end
+    return n
+end
+
+function gunKnownRange67(tool)
+    local n = readToolRangeNumber67(tool)
+    if n and n > 0 and n <= 10000 then
+        return n
+    end
+    return 250
+end
+
+function isGunRangeConstantUpvalue67(val, tool, stock)
+    if type(val) ~= "number" or val <= 0 or val > 10000 then
+        return false
+    end
+    stock = tonumber(stock) or gunKnownRange67(tool)
+    if math.abs(val - stock) <= 2 then
+        return true
+    end
+    if val >= 50 and val <= 2000 and math.abs(val - stock) <= 50 then
+        return true
+    end
+    return false
+end
+
+function patchGunRangeUpvalues67(tool, targetRange, stock, saveTable)
+    local dbg = rainDebugLib67()
+    if not dbg then
+        return
+    end
+    targetRange = tonumber(targetRange) or gunKnownRange67(tool)
+    forEachGunActivatedFn67(tool, function(fn)
+        local info = rainDebugGetInfo67(fn)
+        local nups = info and info.nups or rainFnUpvalueCount67(fn, dbg)
+        local slot = nil
+        if type(saveTable) == "table" then
+            if saveTable[fn] == nil then
+                saveTable[fn] = {}
+            end
+            slot = saveTable[fn]
+        end
+        for i = 1, nups do
+            local val = dbg.getupvalue(fn, i)
+            local knownSlot = slot and slot[i] ~= nil
+            if knownSlot or isGunRangeConstantUpvalue67(val, tool, stock) then
+                if slot and slot[i] == nil then
+                    slot[i] = val
+                end
+                if math.abs(val - targetRange) > 1e-6 then
+                    pcall(dbg.setupvalue, fn, i, targetRange)
+                end
+            end
+        end
+    end)
 end
 
 function patchGunCooldownUpvalues67(tool, targetDelay, stock, saveTable)
@@ -15632,6 +15830,103 @@ function desHoodForceReset67()
     character:BreakJoints()
 end
 
+function desHoodCoerceSettingValue67(v, defaultOn)
+    if v == true then
+        return "9e9"
+    end
+    if v == false then
+        return "0"
+    end
+    if type(v) == "number" then
+        return v == 0 and "0" or tostring(v)
+    end
+    if type(v) == "string" then
+        local lower = string.lower(v)
+        if lower == "true" then
+            return "9e9"
+        end
+        if lower == "false" or v == "" or v == "0" then
+            return "0"
+        end
+        return v
+    end
+    return defaultOn == true and "9e9" or "0"
+end
+
+function desHoodArmorValue67()
+    local dh = desHoodCfg67()
+    local vc = dh and dh["Value Changer"]
+    local legacy = dh and dh["Fun Edits"]
+    local v = (type(vc) == "table" and vc["Armor Value"])
+        or (type(legacy) == "table" and legacy["Armor Value"])
+        or (dh and dh["Armor Value"])
+    return desHoodCoerceSettingValue67(v, true)
+end
+
+function desHoodMuscleValue67()
+    local dh = desHoodCfg67()
+    local vc = dh and dh["Value Changer"]
+    local legacy = dh and dh["Fun Edits"]
+    local v = (type(vc) == "table" and vc["Muscle Value"])
+        or (type(legacy) == "table" and legacy["Muscle Value"])
+        or (dh and dh["Muscle Value"])
+    return desHoodCoerceSettingValue67(v, true)
+end
+
+local function desHoodFireSettings67(key, value)
+    local remote = type(getRem) == "function" and getRem() or nil
+    if remote and remote:IsA("RemoteEvent") then
+        remote:FireServer("ChangeSettings", key, tostring(value or "9e9"))
+    end
+end
+
+local function desHoodSafeArmorValue67()
+    local char = Self and Self.Character
+    if not char then
+        return 0
+    end
+    local be = char:FindFirstChild("BodyEffects")
+    if be then
+        local armor = be:FindFirstChild("Armor")
+        if armor then
+            return tonumber(armor.Value) or 0
+        end
+    end
+    for _, v in ipairs(char:GetDescendants()) do
+        if v:IsA("ValueBase") and string.lower(v.Name) == "armor" then
+            return tonumber(v.Value) or 0
+        end
+    end
+    return 0
+end
+
+function desHoodApplyArmor67()
+    task.spawn(function()
+        local buy = type(Mango) == "table" and Mango._RainTryPurchaseArmor67
+        if type(buy) ~= "function" and typeof(getgenv) == "function" then
+            buy = getgenv().RainTryPurchaseArmor67
+        end
+        if desHoodSafeArmorValue67() < 200 and type(buy) == "function" then
+            for _ = 1, 3 do
+                local ok, bought = pcall(buy)
+                if ok and bought == true then
+                    task.wait(0.5)
+                    if desHoodSafeArmorValue67() >= 200 then
+                        break
+                    end
+                end
+                task.wait(0.35)
+            end
+        end
+        desHoodFireSettings67("ArmorSave", desHoodArmorValue67())
+        desHoodForceReset67()
+    end)
+end
+
+function desHoodApplyMuscle67()
+    desHoodFireSettings67("MuscleInformation", desHoodMuscleValue67())
+end
+
 local function desHoodReloadEvent67()
     local rs = game:GetService("ReplicatedStorage")
     local main = rs:FindFirstChild("MainEvent")
@@ -18053,6 +18348,7 @@ local function desHoodActionsPoll67()
     local dh = desHoodCfg67()
     if dh then
         mergeActions(dh["Actions"])
+        mergeActions(type(dh["Value Changer"]) == "table" and dh["Value Changer"]["Actions"] or nil)
         mergeActions(type(dh["Fun Edits"]) == "table" and dh["Fun Edits"]["Actions"] or nil)
         mergeActions(type(dh["Kill All"]) == "table" and dh["Kill All"]["Actions"] or nil)
     end
@@ -18060,6 +18356,8 @@ local function desHoodActionsPoll67()
         return
     end
     local handlers = {
+        ["Apply Armor"] = desHoodApplyArmor67,
+        ["Apply Muscle"] = desHoodApplyMuscle67,
         ["Force Reset"] = desHoodForceReset67,
         ["Kill All"] = function()
             if desHoodCfgOn67("Kill All Enabled") then
@@ -18110,6 +18408,23 @@ local function desHoodKillAllInit67()
             local rk = keyCd(dhGet67("Kill All On Respawn Keybind", "Kill All", "On Respawn Keybind") or "")
             if rk and input.KeyCode == rk then
                 desHoodToggleKillFlag67("On Respawn")
+            end
+        end
+        if dh then
+            local vc = dh["Value Changer"] or dh["Fun Edits"]
+            local ak = (type(vc) == "table" and vc["Apply Armor Keybind"]) or dh["Apply Armor Keybind"]
+            if type(ak) == "string" and ak ~= "" then
+                local kc = keyCd(ak)
+                if kc and input.KeyCode == kc then
+                    pcall(desHoodApplyArmor67)
+                end
+            end
+            local mk = (type(vc) == "table" and vc["Apply Muscle Keybind"]) or dh["Apply Muscle Keybind"]
+            if type(mk) == "string" and mk ~= "" then
+                local kc = keyCd(mk)
+                if kc and input.KeyCode == kc then
+                    pcall(desHoodApplyMuscle67)
+                end
             end
         end
     end))
@@ -23207,50 +23522,110 @@ function wbInit67()
     end))
 end
 
+function gunRangeEntryForTool67(grc, tool)
+    if type(grc) ~= "table" or not tool then
+        return nil
+    end
+    local name = tool.Name
+    local entry = grc[name]
+    if type(entry) == "number" then
+        return entry
+    end
+    if type(entry) == "table" then
+        return tonumber(entry.Value)
+    end
+    local clean = name:gsub("%[", ""):gsub("%]", "")
+    entry = grc[clean] or grc["[" .. clean .. "]"]
+    if type(entry) == "number" then
+        return entry
+    end
+    if type(entry) == "table" then
+        return tonumber(entry.Value)
+    end
+    return nil
+end
+
+function gunRangeTargetForTool67(tool, grc, globalRange)
+    local per = gunRangeEntryForTool67(grc, tool)
+    local raw = per ~= nil and per or globalRange
+    return rainNormGunRange67(raw, globalRange or 1000)
+end
+
 function rngCh67()
     local LocalPlayer = Self
-    local rangeBackup = {}
+    local rangeValueBackup = {}
+    local rangeAttrBackup = {}
+    local savedGunRangeUpvalues = {}
+    local rangeWatchPacks = {}
+    local rangeContainerConns = {}
+    local pendingRangeWait = {}
     local lastRangeEnabled = false
     local function clampGunRangeChangerStuds(v)
         return rainNormGunRange67(v, 1000)
     end
+    local function applyListContains(applyTo, toolName)
+        if type(applyTo) ~= "table" or #applyTo == 0 then
+            return true
+        end
+        for i = 1, #applyTo do
+            if applyTo[i] == toolName then
+                return true
+            end
+        end
+        return false
+    end
+    local function disconnectRangeWatch(tool)
+        local pack = rangeWatchPacks[tool]
+        if not pack then
+            return
+        end
+        for i = 1, #pack do
+            pcall(function()
+                pack[i]:Disconnect()
+            end)
+        end
+        rangeWatchPacks[tool] = nil
+    end
     local function restoreGunRanges()
-        for rv, orig in pairs(rangeBackup) do
+        for tool in pairs(rangeWatchPacks) do
+            disconnectRangeWatch(tool)
+        end
+        for rv, orig in pairs(rangeValueBackup) do
             if rv.Parent and typeof(orig) == "number" then
                 pcall(function()
                     rv.Value = orig
                 end)
             end
         end
-        for k in pairs(rangeBackup) do
-            rangeBackup[k] = nil
-        end
-    end
-    local function patchContainer(container, rangeVal)
-        if not container then
-            return
-        end
-        local desHood = isDesHoodGame67()
-        for _, tool in ipairs(container:GetChildren()) do
-            if tool:IsA("Tool") then
-                local rv = tool:FindFirstChild("Range")
-                if rv and (rv:IsA("NumberValue") or rv:IsA("IntValue")) then
-                    if rangeBackup[rv] == nil then
-                        rangeBackup[rv] = rv.Value
-                    end
-                    local target = rangeVal
-                    if desHood then
-                        local cap = desHoodToolRangeCap67(tool)
-                        if cap then
-                            target = math.min(target, cap)
-                        end
-                    end
-                    rv.Value = target
-                end
+        for tool, orig in pairs(rangeAttrBackup) do
+            if tool.Parent and typeof(orig) == "number" and tool.GetAttribute then
+                pcall(function()
+                    tool:SetAttribute("Range", orig)
+                end)
             end
         end
+        for k in pairs(rangeValueBackup) do
+            rangeValueBackup[k] = nil
+        end
+        for k in pairs(rangeAttrBackup) do
+            rangeAttrBackup[k] = nil
+        end
+        for fn in pairs(savedGunRangeUpvalues) do
+            local slot = savedGunRangeUpvalues[fn]
+            if type(slot) == "table" then
+                local dbg = rainDebugLib67()
+                if dbg then
+                    for i, orig in pairs(slot) do
+                        if type(i) == "number" and typeof(orig) == "number" then
+                            pcall(dbg.setupvalue, fn, i, orig)
+                        end
+                    end
+                end
+            end
+            savedGunRangeUpvalues[fn] = nil
+        end
     end
-    local function tickGunRange()
+    local function resolveGunRangeState()
         local cfg = cfg67()
         local gm = cfg and cfg["Gun Mods"]
         local grc = gm and gm["Gun Range Changer"]
@@ -23258,43 +23633,179 @@ function rngCh67()
         local advInfRange = type(agm) == "table" and agm["Infinite Range"] == true
         local en = type(grc) == "table" and grc.Enabled == true
         local rangeActive = en or advInfRange
+        local globalRange = advInfRange and math.huge or clampGunRangeChangerStuds(grc and grc.Range)
+        if isDesHoodGame67() and (globalRange == math.huge or globalRange > 1000) then
+            globalRange = 1000
+        end
+        local applyTo = type(grc) == "table" and grc["ApplyTo"] or {}
+        return rangeActive, grc, globalRange, applyTo
+    end
+    local function targetForTool(tool, grc, globalRange)
+        local target = gunRangeTargetForTool67(tool, grc, globalRange)
+        if isDesHoodGame67() then
+            if target == math.huge or target > 1000 then
+                target = 1000
+            end
+            local cap = desHoodToolRangeCap67(tool)
+            if cap then
+                target = math.min(target, cap)
+            end
+        end
+        return target
+    end
+    local function writeToolRange67(tool, rv, target)
+        local stock = rangeValueBackup[rv] or rangeAttrBackup[tool] or gunKnownRange67(tool)
+        if rv and (rv:IsA("NumberValue") or rv:IsA("IntValue")) then
+            if math.abs((tonumber(rv.Value) or 0) - target) > 1e-6 then
+                rv.Value = target
+            end
+        end
+        if tool.GetAttribute then
+            local cur = tonumber(tool:GetAttribute("Range"))
+            if cur == nil or math.abs(cur - target) > 1e-6 then
+                tool:SetAttribute("Range", target)
+            end
+        end
+        patchGunRangeUpvalues67(tool, target, stock, savedGunRangeUpvalues)
+    end
+    local function ensureRangeWatch(tool, rv)
+        if rangeWatchPacks[tool] then
+            return
+        end
+        local pack = {}
+        rangeWatchPacks[tool] = pack
+        if rv and (rv:IsA("NumberValue") or rv:IsA("IntValue")) then
+            table.insert(pack, rv:GetPropertyChangedSignal("Value"):Connect(function()
+                if not (tool and tool.Parent) then
+                    return
+                end
+                local rangeActive, grc, globalRange, applyTo = resolveGunRangeState()
+                if not rangeActive or not applyListContains(applyTo, tool.Name) then
+                    return
+                end
+                writeToolRange67(tool, rv, targetForTool(tool, grc, globalRange))
+            end))
+        end
+        if tool.GetAttributeChangedSignal then
+            table.insert(pack, tool:GetAttributeChangedSignal("Range"):Connect(function()
+                if not tool.Parent then
+                    return
+                end
+                local rangeActive, grc, globalRange, applyTo = resolveGunRangeState()
+                if not rangeActive or not applyListContains(applyTo, tool.Name) then
+                    return
+                end
+                writeToolRange67(tool, rv or findToolRangeValue67(tool), targetForTool(tool, grc, globalRange))
+            end))
+        end
+        table.insert(pack, tool.AncestryChanged:Connect(function(_, parent)
+            if parent == nil then
+                disconnectRangeWatch(tool)
+                if rv then
+                    rangeValueBackup[rv] = nil
+                end
+                rangeAttrBackup[tool] = nil
+            end
+        end))
+    end
+    local function queueRangeWait(tool, grc, globalRange, applyTo)
+        if pendingRangeWait[tool] or not (tool and tool.Parent) then
+            return
+        end
+        pendingRangeWait[tool] = true
+        task.spawn(function()
+            local rv = tool:WaitForChild("Range", 5)
+            pendingRangeWait[tool] = nil
+            if rv and tool.Parent then
+                patchToolRange(tool, grc, globalRange, applyTo)
+            end
+        end)
+    end
+    local function patchToolRange(tool, grc, globalRange, applyTo)
+        if not (tool and tool:IsA("Tool")) then
+            return
+        end
+        if not applyListContains(applyTo, tool.Name) then
+            return
+        end
+        local rv = findToolRangeValue67(tool)
+        if not rv then
+            queueRangeWait(tool, grc, globalRange, applyTo)
+        end
+        if rv and rangeValueBackup[rv] == nil then
+            local orig = rv.Value
+            if typeof(orig) == "number" and orig <= 10000 then
+                rangeValueBackup[rv] = orig
+            else
+                rangeValueBackup[rv] = gunKnownRange67(tool)
+            end
+        end
+        if rangeAttrBackup[tool] == nil and tool.GetAttribute then
+            local orig = tonumber(tool:GetAttribute("Range"))
+            if orig and orig <= 10000 then
+                rangeAttrBackup[tool] = orig
+            elseif rv and rangeValueBackup[rv] then
+                rangeAttrBackup[tool] = rangeValueBackup[rv]
+            else
+                rangeAttrBackup[tool] = gunKnownRange67(tool)
+            end
+        end
+        local target = targetForTool(tool, grc, globalRange)
+        writeToolRange67(tool, rv, target)
+        ensureRangeWatch(tool, rv)
+    end
+    local function patchContainer(container, grc, globalRange, applyTo)
+        if not container then
+            return
+        end
+        for _, tool in ipairs(container:GetChildren()) do
+            patchToolRange(tool, grc, globalRange, applyTo)
+        end
+    end
+    local function hookRangeContainer(container)
+        if not container or rangeContainerConns[container] then
+            return
+        end
+        rangeContainerConns[container] = container.ChildAdded:Connect(function(child)
+            task.defer(function()
+                local rangeActive, grc, globalRange, applyTo = resolveGunRangeState()
+                if rangeActive then
+                    patchToolRange(child, grc, globalRange, applyTo)
+                end
+            end)
+        end)
+    end
+    local function tickGunRange()
+        local rangeActive, grc, globalRange, applyTo = resolveGunRangeState()
         if lastRangeEnabled and not rangeActive then
             restoreGunRanges()
         end
         lastRangeEnabled = rangeActive
         if not rangeActive then
-            for _, container in ipairs({ LocalPlayer.Backpack, LocalPlayer.Character }) do
-                if container then
-                    for _, tool in ipairs(container:GetChildren()) do
-                        if tool:IsA("Tool") then
-                            local rv = tool:FindFirstChild("Range")
-                            if rv and (rv:IsA("NumberValue") or rv:IsA("IntValue")) then
-                                if rangeBackup[rv] == nil and rv.Value <= 10000 then
-                                    rangeBackup[rv] = rv.Value
-                                end
-                                if rv.Value > 10000 then
-                                    rv.Value = rangeBackup[rv] or 250
-                                end
-                            end
-                        end
-                    end
-                end
-            end
             return
         end
-        local rangeVal = advInfRange and math.huge or clampGunRangeChangerStuds(grc and grc.Range)
-        if isDesHoodGame67() and (rangeVal == math.huge or rangeVal > 1000) then
-            rangeVal = 1000
-        end
-        patchContainer(LocalPlayer.Backpack, rangeVal)
-        patchContainer(LocalPlayer.Character, rangeVal)
+        patchContainer(LocalPlayer.Backpack, grc, globalRange, applyTo)
+        patchContainer(LocalPlayer.Character, grc, globalRange, applyTo)
         local sg = LocalPlayer:FindFirstChild("StarterGear")
         if sg then
-            patchContainer(sg, rangeVal)
+            patchContainer(sg, grc, globalRange, applyTo)
         end
     end
+    hookRangeContainer(LocalPlayer.Backpack)
+    hookRangeContainer(LocalPlayer.Character)
+    local function hookStarterGear()
+        hookRangeContainer(LocalPlayer:FindFirstChild("StarterGear"))
+    end
+    hookStarterGear()
+    LocalPlayer.ChildAdded:Connect(function(child)
+        if child.Name == "StarterGear" then
+            hookStarterGear()
+            task.defer(tickGunRange)
+        end
+    end)
     if typeof(getgenv) == "function" then
         getgenv()._RainRestoreGunRanges = restoreGunRanges
+        getgenv()._RainForceGunRangeSync67 = tickGunRange
     end
     trkConn(RunService.Heartbeat:Connect(function()
         pcall(tickGunRange)
@@ -41747,12 +42258,17 @@ do
 		"Military", "Battleworn Orange", "1984", "Patriot", "Battleworn Green", "Biohazard", "Ice",
 	}
 
+	local DOUBLE_BARREL_SG_SKINS = {
+		"Jungle Blaster", "Electric", "GPOII", "Snow Wrap", "Red Hot", "Halloween23", "Stars", "Ruby", "Biohazard", "White Stripes", "Inferno", "Sushi", "Iced Out", "Portal", "Valentine", "SoulII", "XMAS24", "Emerald", "Short Cake", "Venom", "Galaxy", "Heaven", "Purple Yellow Wrap", "Skull", "Water", "Black & White", "Aqua", "Samurai", "Icey", "Wild West", "Soul", "Love", "Gold Glory", "XMAS", "Christmas Wrap", "Battleworn Orange", "Toy", "Paper", "PumpkinCat", "Ribbon", "Wraith", "Golden Age", "Red Death", "Danger", "Music", "Bubu", "Magma", "Kingpin", "Flower", "Red Skull", "Angry-Hero", "Cupid", "Duck", "Blossom", "Beary", "ShrimpII", "Shrimp", "Grumpy", "Reptile", "Ninja", "8-BIT", "Wire", "Butterfly", "Unicorn", "Battleworn Silver", "Cat", "Metal", "Penguin", "Future", "Brainrot", "Glassy", "Red Tiger", "Hoodmas", "Nightmare", "Arcade", "Shadow", "Luck", "Etheral", "Battleworn Purple", "Shader", "Dragon", "Battleworn Green", "Premium Yellow", "Spooky", "Undead", "Premium Red", "Battleworn Pink", "Car", "Mystical", "Matrix", "Tact", "Pink Fuchsia", "Rainbow", "Candy", "1984", "Jellyfish", "Fish", "Military", "Blue Wrap", "Gothic", "Patriot", "DH-Stars", "Cartoon", "Ice",
+	}
+
 	local SMG_SKINS = {
 		"Golden Age", "Galaxy", "Adurite", "Dragon", "Ice", "Love", "Purple", "Red", "Green", "Blue",
 	}
 
 	local WEAPON_SKIN_FALLBACKS = {
 		["[Bat]"] = BAT_SKINS,
+		["[Double-Barrel SG]"] = DOUBLE_BARREL_SG_SKINS,
 		["[TacticalShotgun]"] = TACTICAL_SHOTGUN_SKINS,
 		["[Shotgun]"] = TACTICAL_SHOTGUN_SKINS,
 		["[Silencer]"] = GUN_SKINS,
@@ -42266,6 +42782,13 @@ do
 		if grand == "Delay Changer" and key == "Value" then
 			spec.min, spec.max, spec.decimals = 0, 2, 4
 			spec.suffix = "s"
+			return spec
+		end
+
+		if grand == "Gun Range Changer" and key == "Value" then
+			spec.min, spec.max, spec.decimals = 100, 9000000000, 0
+			spec.infinite = true
+			spec.max_text = "inf"
 			return spec
 		end
 
@@ -42789,11 +43312,38 @@ do
 			name = "wall bang"
 		end
 		if flag == "Gun Mods.Advanced Gun Mods.Damage Overrider" then
+			if value == true then
+				local gm = shared.rain and shared.rain["Gun Mods"]
+				local dmgOver = gm and gm["Damage Overrider"]
+				if type(dmgOver) ~= "table" then
+					dmgOver = { Enabled = true, Config = "Full" }
+					if type(gm) == "table" then
+						gm["Damage Overrider"] = dmgOver
+					end
+				else
+					dmgOver.Enabled = true
+				end
+				setAt(parts, nil)
+				value = nil
+			elseif value == nil then
+				setAt(parts, false)
+				value = false
+			end
+			name = "damage overrider"
+		end
+		if flag == "Gun Mods.Damage Overrider.Enabled" then
 			if value == nil then
 				setAt(parts, false)
 				value = false
 			end
 			name = "damage overrider"
+		end
+		if flag == "Gun Mods.Damage Overrider.Config" then
+			if value == nil or value == "Max" then
+				setAt(parts, "Full")
+				value = "Full"
+			end
+			name = "damage overrider mode"
 		end
 		if flag == "Gun Mods.Advanced Gun Mods.Force Hit"
 			or flag == "Gun Mods.Advanced Gun Mods.Magic Bullet" then
@@ -43617,7 +44167,13 @@ do
 							name = "advanced gun mods",
 							side = 1,
 							path = { "Gun Mods", "Advanced Gun Mods" },
-							keys = { "Wallbang", "Force Hit", "Damage Overrider" },
+							keys = { "Wallbang", "Force Hit" },
+						},
+						{
+							name = "damage overrider",
+							side = 1,
+							path = { "Gun Mods", "Damage Overrider" },
+							keys = { "Enabled", "Config" },
 						},
 						{
 							name = "rapid fire",
@@ -43737,6 +44293,16 @@ do
 							side = 2,
 							path = { "Game Specific", "Des Hood", "Sentry" },
 							keys = { "Enabled", "Mode", "Player" },
+						},
+						{
+							name = "value changer",
+							side = 2,
+							path = { "Game Specific", "Des Hood", "Value Changer" },
+							keys = { "Enabled", "Armor Value", "Muscle Value", "Apply Armor Keybind", "Apply Muscle Keybind" },
+							buttons = {
+								{ name = "apply armor", action = "desHoodApplyArmor67" },
+								{ name = "apply muscle", action = "desHoodApplyMuscle67" },
+							},
 						},
 						{
 							name = "kill all",
