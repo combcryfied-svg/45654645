@@ -8395,7 +8395,7 @@ Games = {
             end
         }
     },
-    [10765456143] = {
+    [10766087405] = {
         Name = "Glitch Des Hood",
         Updater = "Z3eHooDMSOUEPoS233^+",
         HoodGame = true,
@@ -8579,7 +8579,7 @@ Games = {
             end,
         },
     },
-    [10765699106] = {
+    [10766623003] = {
         Name = "ZHD",
         Updater = "Z33H00DM2U4SEP0S^2",
         HoodGame = true,
