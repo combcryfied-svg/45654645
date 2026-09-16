@@ -2456,6 +2456,34 @@ function maintainSelectLock67()
     end
 end
 
+-- Manual Select (Z): never let FOV/cursor rescans replace the locked player.
+function pinManualSelectLock67(m, saOn, tbOn, aaOn)
+    if not selectModeOn67() or selectAutomaticOn67() or not (selectEngaged67() or SP or SP2) then
+        return false
+    end
+    local pinned = m.LockedTarget
+    if not stickyPlr(pinned) then
+        return false
+    end
+    if saOn then
+        m.SilentAimTarget = pinned
+        SP = true
+    end
+    if tbOn then
+        m.TriggerbotTarget = pinned
+        local tb = shared.rain and shared.rain.TriggerBot
+        if type(tb) == "table" and tb.Enabled == true then
+            m.TriggerState = true
+        end
+    end
+    if aaOn then
+        m.AimAssistTarget = pinned
+        m.CamlockTarget = pinned
+        SP2 = true
+    end
+    return true
+end
+
 function syncSelectAutomatic67(force)
     if rageBotManualUntarget67() then
         return
@@ -2947,6 +2975,9 @@ function getSaPlr()
         return nil
     end
     local m = Mango.Locals
+    if selectModeOn67() and not selectAutomaticOn67() and selectEngaged67() and stickyPlr(m.LockedTarget) then
+        return m.LockedTarget
+    end
     -- Sticky Target lock always wins (even during respawn when Character is nil)
     if saLocked() then
         return m.LockedTarget or m.SilentAimTarget
@@ -14644,6 +14675,9 @@ function syncTgt()
         return
     end
     maintainSelectLock67()
+    if pinManualSelectLock67(m, saOn, tbOn, aaOn) then
+        return
+    end
 
     local unified
     local saSticky = saStickyLock67()
@@ -14654,11 +14688,11 @@ function syncTgt()
             unified = m.SilentAimTarget
         end
     elseif stickyPlr(m.LockedTarget) and (
-        (selectModeOn67() and selectEngaged67())
+        (selectModeOn67() and not selectAutomaticOn67() and (selectEngaged67() or SP or SP2))
         or (combatOkPlr67(m.LockedTarget) and (saSticky or SP or SP2))
     ) then
         unified = m.LockedTarget
-    elseif combatSelectEngaged67() then
+    elseif combatSelectEngaged67() and not (selectModeOn67() and not selectAutomaticOn67()) then
         for _, plr in ipairs({
             m.SilentAimTarget,
             m.AimAssistTarget,
@@ -14673,7 +14707,11 @@ function syncTgt()
     end
 
     if not unified and saOn then
-        if selectAutomaticOn67() or saFovAutoTarget67() then
+        local manualSelectLock = selectModeOn67() and not selectAutomaticOn67()
+            and selectEngaged67() and stickyPlr(m.LockedTarget)
+        if manualSelectLock then
+            unified = m.LockedTarget
+        elseif selectAutomaticOn67() or saFovAutoTarget67() then
             if okPlr(m.LockedTarget) then
                 unified = m.LockedTarget
             elseif okPlr(m.SilentAimTarget) then
@@ -31474,7 +31512,14 @@ local SelectKey = keyCd(selectKeybind67())
 local combatKeyHandled = false
 
 local function combatLockOn()
-    local locked = Player.GetClosestPlayerToCursor()
+    rainInvalidateClosestCache67()
+    local locked = nil
+    if type(rainGetClosestPlayerCached67) == "function" then
+        locked = rainGetClosestPlayerCached67(true)
+    end
+    if not locked and Player and type(Player.GetClosestPlayerToCursor) == "function" then
+        locked = Player.GetClosestPlayerToCursor()
+    end
     if not locked then
         return false
     end
