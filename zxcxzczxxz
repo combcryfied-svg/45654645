@@ -2236,7 +2236,17 @@ UserInputService = game:GetService("UserInputService")
 ReplicatedStorage = game:GetService("ReplicatedStorage")
 Self = Players.LocalPlayer
 Mouse = Self:GetMouse()
-Camera = workspace.CurrentCamera
+function rainEnsureCamera67()
+    local cam = workspace.CurrentCamera
+    if cam then
+        Camera = cam
+    end
+    return cam
+end
+Camera = rainEnsureCamera67()
+pcall(function()
+    workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(rainEnsureCamera67)
+end)
 GuiInsetOffsetY = game:GetService('GuiService'):GetGuiInset().Y
 Mango = nil
 
@@ -2849,7 +2859,13 @@ function saLocked()
     end
     if selectAutomaticOn67() then
         local tgt = m.SilentAimTarget or m.LockedTarget
-        return tgt ~= nil and tgt.Parent ~= nil
+        if not tgt or not tgt.Parent then
+            return false
+        end
+        if saFovWide67() then
+            return true
+        end
+        return m.IsBoxFocused == true
     end
     if selectModeOn67() then
         if m.SelectEngaged == true then
@@ -2932,6 +2948,9 @@ function rainSelfKnocked67(char)
 end
 
 function saIgnoreChecks()
+    if selectAutomaticOn67() then
+        return saFovWide67() and saLocked()
+    end
     return saLocked()
 end
 
@@ -3261,8 +3280,7 @@ function cbmRefreshHit()
     local char = aimPlayer.Character
     local canResolve = stickyResolveOk67(char)
         or passCombatCond(char)
-        or (type(CurrentGame) == "table" and CurrentGame.UsesHoodCustoms == true
-            and selectAutomaticOn67())
+        or (selectAutomaticOn67() and saFovReady67())
     if canResolve and Player and Player.GetHitPosition then
         local live = Player.GetHitPosition("Silent")
         if typeof(live) == "Vector3" and live.Magnitude > 1e-4 then
@@ -7255,7 +7273,7 @@ function hcRedirectPos()
     then
         return nil
     end
-    if not shared.rain.SilentAim.Enabled then
+    if not shared.rain.SilentAim.Enabled or not saActive() then
         return nil
     end
     local aimPlayer = getSaPlr()
@@ -7275,15 +7293,7 @@ function hcRedirectPos()
         hit = cache.pos
     end
     if typeof(hit) ~= "Vector3" or hit.Magnitude <= 1e-4 then
-        local head = aimPlayer.Character:FindFirstChild("Head")
-        if head and head:IsA("BasePart") then
-            hit = head.Position
-            if Mango.Locals then
-                Mango.Locals.HitPosition = hit
-            end
-        else
-            return nil
-        end
+        return nil
     end
     return hit
 end
@@ -7613,6 +7623,9 @@ end
 
 function ghSyncMousePos67(hit, origin, maxRange)
     if not ghFlow67() or not shared.rain.SilentAim.Enabled or not saActive() then
+        return false
+    end
+    if not saFovWide67() and not saFovReady67() then
         return false
     end
     if typeof(hit) ~= "Vector3" or hit.Magnitude <= 1e-4 then
@@ -12501,6 +12514,7 @@ end
             end
 
             local function UpdateBox()
+                pcall(rainEnsureCamera67)
                 if not shared.rain.SilentAim.Enabled then
                     setBoxFovVisible(false)
                     destroySilent3DFov()
@@ -13145,6 +13159,34 @@ function GetTBWeaponConfig()
     return silentAimWcClass67(tool and tool.Name or "")
 end
 
+function getTriggerBotFovConfig67()
+    local fovBlock = shared.rain.TriggerBot and shared.rain.TriggerBot.FOV
+    if type(fovBlock) ~= "table" then
+        return { X = 10, Y = 10, Z = 10 }
+    end
+    local wc = fovBlock["Weapon Configuration"]
+    if type(wc) == "table" and wc.Enabled == true then
+        local cls = GetTBWeaponConfig()
+        local cfg = wc[cls] or wc.Others or wc.Pistols or wc.Shotguns
+        if type(cfg) == "table" then
+            return {
+                X = math.max(tonumber(cfg.X) or 10, 0),
+                Y = math.max(tonumber(cfg.Y) or 10, 0),
+                Z = math.max(tonumber(cfg.Z) or 10, 0),
+            }
+        end
+    end
+    local base = fovBlock.FOV
+    if type(base) == "table" then
+        return {
+            X = math.max(tonumber(base.X) or 10, 0),
+            Y = math.max(tonumber(base.Y) or 10, 0),
+            Z = math.max(tonumber(base.Z) or 10, 0),
+        }
+    end
+    return { X = 10, Y = 10, Z = 10 }
+end
+
 function tbStillShootOn()
     if selectAutomaticOn67() and Mango and Mango.Locals and Mango.Locals.SilentAimTarget and Mango.Locals.SilentAimTarget.Parent then
         return true
@@ -13212,20 +13254,12 @@ function GetTBBox(targetHRP, allowOffScreen)
         return nil
     end
 
-    local Size = targetHRP.Size.Y
-    local Position = screenPos
-    local fovBlock = shared.rain.TriggerBot.FOV
-    local wc = fovBlock and fovBlock["Weapon Configuration"]
-    local fovConfig
-    if type(wc) == "table" and wc.Enabled == true then
-        local weaponCategory = GetTBWeaponConfig()
-        fovConfig = wc[weaponCategory] or wc.Others
-    else
-        fovConfig = (type(fovBlock) == "table" and fovBlock.FOV) or { X = 10, Y = 10, Z = 10 }
+    local fovConfig = getTriggerBotFovConfig67()
+    if not fovConfig then
+        return nil
     end
-    if not fovConfig then return nil end
-    local halfW = math.max(tonumber(fovConfig.X) or 10, 0)
-    local halfH = math.max(tonumber(fovConfig.Y) or 10, 0)
+    local halfW = fovConfig.X
+    local halfH = fovConfig.Y
 
     return {
         X = screenPos.X - halfW,
@@ -13279,14 +13313,14 @@ function setTriggerBotFovVisible67(visible)
     end
 end
 
-function tbDrawBox(rootPart, insideBox)
+function tbDrawBox(rootPart, insideBox, allowOffScreen)
     local fovCfg = shared.rain.TriggerBot.FOV
     if type(fovCfg) ~= "table" or fovCfg.Visible ~= true then
         setTriggerBotFovVisible67(false)
         return
     end
-    local box = GetTBBox(rootPart)
-    if not box or not box.Visible then
+    local box = GetTBBox(rootPart, allowOffScreen == true)
+    if not box or (not box.Visible and allowOffScreen ~= true) then
         setTriggerBotFovVisible67(false)
         return
     end
@@ -13303,26 +13337,50 @@ function tbDrawBox(rootPart, insideBox)
 end
 
 function tbFire(targetPlayer, rootPart, mousePos)
-    if tbStillShootOn() and Mango.Locals.TriggerState and tbSyncedTarget(targetPlayer) then
-        setTriggerBotFovVisible67(false)
-        return true
-    end
-    -- A Silent Aim / Aim Assist lock is the target they selected. Triggerbot has to
-    -- stay on that player even when they look away; the FOV box is only for free aim.
-    local selected = tbSelectedPlr()
-    if selected and targetPlayer == selected then
-        local inside = tbInBox(rootPart, mousePos, true)
-        tbDrawBox(rootPart, inside)
-        return true
-    end
     local fovCfg = shared.rain.TriggerBot.FOV
     local useFov = type(fovCfg) == "table" and fovCfg.Enabled == true
+    local showFov = type(fovCfg) == "table" and fovCfg.Visible == true
+    local manualSelect = selectModeOn67() and not selectAutomaticOn67()
+
+    -- Manual Select (Z lock): keep firing the picked target without cursor/FOV checks.
+    if manualSelect then
+        if tbStillShootOn() and Mango.Locals.TriggerState and tbSyncedTarget(targetPlayer) then
+            if showFov then
+                tbDrawBox(rootPart, tbInBox(rootPart, mousePos, true), true)
+            else
+                setTriggerBotFovVisible67(false)
+            end
+            return true
+        end
+        local selected = tbSelectedPlr()
+        if selected and targetPlayer == selected then
+            if showFov then
+                local inside = tbInBox(rootPart, mousePos, true)
+                tbDrawBox(rootPart, inside, true)
+            else
+                setTriggerBotFovVisible67(false)
+            end
+            return true
+        end
+    end
+
+    -- Automatic (and free-aim): FOV on = cursor must be inside the 2D box; FOV off = cursor on hitbox.
     if useFov then
-        local inside, box = tbInBox(rootPart, mousePos, false)
-        tbDrawBox(rootPart, inside)
+        local inside = tbInBox(rootPart, mousePos, false)
+        if showFov then
+            tbDrawBox(rootPart, inside, false)
+        else
+            setTriggerBotFovVisible67(false)
+        end
         return inside
     end
-    setTriggerBotFovVisible67(false)
+
+    if showFov then
+        local inside = tbInBox(rootPart, mousePos, false)
+        tbDrawBox(rootPart, inside, false)
+    else
+        setTriggerBotFovVisible67(false)
+    end
     return tbMouse(targetPlayer)
 end
 
@@ -13380,6 +13438,10 @@ function TriggerBot()
         Mango.Locals.TriggerbotTarget = nil
         Mango.Locals.HitTrigger = nil
         return
+    end
+
+    if selectAutomaticOn67() then
+        Mango.Locals.TriggerState = true
     end
 
     local tbMode = shared.rain.TriggerBot.DetectionMode
@@ -13493,7 +13555,8 @@ function TriggerBot()
     Mango.Locals.TriggerbotTarget = targetPlayer
     Mango.Locals.HitTrigger = RootPart
 
-    if tbStillShootOn() and tbSyncedTarget(targetPlayer) then
+    local autoFire = selectAutomaticOn67() and Mango.Locals.TriggerState == true
+    if autoFire or (tbStillShootOn() and tbSyncedTarget(targetPlayer)) then
         TriggerShoot()
     elseif shared.rain.TriggerBot.Prediction.Enabled then
         local Velocity = RootPart.AssemblyLinearVelocity
@@ -31219,6 +31282,7 @@ local rainMouseUpdaterLast67 = 0
 local rainMouseUpdaterLastPos67 = nil
 
 refreshSilentAimHit67 = function()
+    pcall(rainEnsureCamera67)
     local function rainFireMouseUpdater()
         if derHoodLockSa67() then
             syncSaBodyLock67()
@@ -31242,6 +31306,9 @@ refreshSilentAimHit67 = function()
             return
         end
         if not saActive() then
+            return
+        end
+        if not saFovWide67() and not saFovReady67() then
             return
         end
         local aimChar = aimPlayer.Character
@@ -31358,8 +31425,7 @@ refreshSilentAimHit67 = function()
     local silentAimPlayer = Mango.Locals.SilentAimTarget
     if silentAimPlayer and silentAimPlayer.Character then
         local char = silentAimPlayer.Character
-        if saFovReady67() and (saLocked() and stickyResolveOk67(char) or passCombatCond(char)
-            or (type(CurrentGame) == "table" and CurrentGame.UsesHoodCustoms == true and selectAutomaticOn67())) then
+        if saFovReady67() and (passCombatCond(char) or saLocked() and stickyResolveOk67(char)) then
             local now = os.clock()
             local hitCache = rainSaHitCacheRef67()
             local hitCacheDt = SA_HIT_REFRESH_DT
@@ -31381,6 +31447,7 @@ refreshSilentAimHit67 = function()
             end
         else
             Mango.Locals.HitPosition = nil
+            Mango.Locals._RainSilentHitRoll = nil
             rainInvalidateSaHitCache67()
         end
         pcall(function()
@@ -31392,6 +31459,7 @@ refreshSilentAimHit67 = function()
         end)
     else
         Mango.Locals.HitPosition = nil
+        Mango.Locals._RainSilentHitRoll = nil
         rainInvalidateSaHitCache67()
         pcall(function()
             _G.SilentAimTarget = nil
