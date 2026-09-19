@@ -45,38 +45,103 @@ rainWebForceNoUI()
 
 --[=[ Rain Web: load config from rainnewuiloader-web BEFORE script runs ]=]
 do
+	local function rainWebHttpFromRequestTable(res)
+		if type(res) ~= "table" then
+			return nil, nil
+		end
+		local body = type(res.Body) == "string" and res.Body
+			or type(res.body) == "string" and res.body
+			or ""
+		local code = tonumber(res.StatusCode) or tonumber(res.status) or tonumber(res.Status)
+		if code == nil and (res.Success == true or res.success == true) then
+			code = 200
+		end
+		if body ~= "" or (code and code > 0) then
+			return code or 200, body
+		end
+		return nil, nil
+	end
+
 	local function rainWebHttpGet(url)
 		local HttpService = game:GetService("HttpService")
-		if HttpService and type(HttpService.RequestAsync) == "function" then
-			local ok, res = pcall(function()
-				return HttpService:RequestAsync({
-					Url = url,
-					Method = "GET",
-					Headers = { ["Accept"] = "application/json" },
-				})
-			end)
-			if ok and type(res) == "table" then
-				local code = tonumber(res.StatusCode) or 0
-				local body = type(res.Body) == "string" and res.Body or ""
-				return code, body
+		local headers = { ["Accept"] = "application/json" }
+		local reqOpts = { Url = url, Method = "GET", Headers = headers }
+
+		-- Executor HTTP first — Opiumware and others block HttpService:RequestAsync.
+		if type(request) == "function" then
+			local ok, res = pcall(request, reqOpts)
+			if ok then
+				local code, body = rainWebHttpFromRequestTable(res)
+				if code then
+					return code, body
+				end
+				if type(res) == "string" and res ~= "" then
+					return 200, res
+				end
 			end
 		end
-		if type(request) == "function" then
-			local ok, res = pcall(request, { Url = url, Method = "GET", Headers = { ["Accept"] = "application/json" } })
-			if ok and type(res) == "table" then
-				local code = tonumber(res.StatusCode) or (res.Success == true and 200 or 0)
-				local body = type(res.Body) == "string" and res.Body or ""
-				if body ~= "" or code > 0 then
+		if type(http_request) == "function" then
+			local ok, res = pcall(http_request, reqOpts)
+			if ok then
+				local code, body = rainWebHttpFromRequestTable(res)
+				if code then
+					return code, body
+				end
+			end
+		end
+		local synLib = typeof(syn) == "table" and syn or nil
+		if not synLib and typeof(getgenv) == "function" then
+			synLib = getgenv().syn
+		end
+		if type(synLib) == "table" and type(synLib.request) == "function" then
+			local ok, res = pcall(synLib.request, reqOpts)
+			if ok then
+				local code, body = rainWebHttpFromRequestTable(res)
+				if code then
 					return code, body
 				end
 			end
 		end
 		if game and typeof(game.HttpGet) == "function" then
 			local ok, body = pcall(function()
-				return game:HttpGet(url)
+				return game:HttpGet(url, true)
 			end)
 			if ok and type(body) == "string" and body ~= "" then
 				return 200, body
+			end
+		end
+		if HttpService and type(HttpService.GetAsync) == "function" then
+			local ok, body = pcall(function()
+				return HttpService:GetAsync(url, true)
+			end)
+			if ok and type(body) == "string" and body ~= "" then
+				return 200, body
+			end
+		end
+		local skipRequestAsync = type(request) == "function" or type(http_request) == "function"
+		if typeof(identifyexecutor) == "function" then
+			local okEx, exName = pcall(identifyexecutor)
+			if okEx and type(exName) == "string" then
+				local low = string.lower(exName)
+				if low:find("opium", 1, true) or low:find("nihon", 1, true) or low:find("awp", 1, true) then
+					skipRequestAsync = true
+				end
+			end
+		end
+		if not skipRequestAsync and HttpService and type(HttpService.RequestAsync) == "function" then
+			local ok, res = pcall(function()
+				return HttpService:RequestAsync({
+					Url = url,
+					Method = "GET",
+					Headers = headers,
+				})
+			end)
+			if ok and type(res) == "table" then
+				local code = tonumber(res.StatusCode) or 0
+				local body = type(res.Body) == "string" and res.Body or ""
+				if body ~= "" or code > 0 then
+					return code, body
+				end
 			end
 		end
 		return nil, nil
@@ -2238,7 +2303,19 @@ Self = Players.LocalPlayer
 Mouse = Self:GetMouse()
 function rainEnsureCamera67()
     local cam = workspace.CurrentCamera
-    if cam then
+    if not cam then
+        return nil
+    end
+    local polluted = typeof(Camera) ~= "Instance"
+    if not polluted then
+        polluted = not pcall(function()
+            if not Camera:IsA("Camera") then
+                error("not camera")
+            end
+            return Camera.CFrame
+        end)
+    end
+    if polluted or Camera ~= cam then
         Camera = cam
     end
     return cam
@@ -2246,6 +2323,9 @@ end
 Camera = rainEnsureCamera67()
 pcall(function()
     workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(rainEnsureCamera67)
+end)
+pcall(function()
+    RunService.Heartbeat:Connect(rainEnsureCamera67)
 end)
 GuiInsetOffsetY = game:GetService('GuiService'):GetGuiInset().Y
 Mango = nil
@@ -3295,7 +3375,7 @@ function cbmRefreshHit()
     return nil
 end
 
-function cbmReady()
+function cbmCanFire67()
     if not cbmOn() then
         return false
     end
@@ -3306,7 +3386,21 @@ function cbmReady()
     if not getSaPlr() then
         return false
     end
-    if not saFovReady67() then
+    if not saActive() then
+        return false
+    end
+    if not saFovWide67() and not saFovReady67() then
+        return false
+    end
+    local hit = Mango.Locals and Mango.Locals.HitPosition
+    if typeof(hit) ~= "Vector3" or hit.Magnitude <= 1e-4 then
+        hit = cbmRefreshHit()
+    end
+    return typeof(hit) == "Vector3" and hit.Magnitude > 1e-4
+end
+
+function cbmReady()
+    if not cbmCanFire67() then
         return false
     end
     return cbmRefreshHit() ~= nil
@@ -6824,6 +6918,15 @@ function ghFlow67()
     return type(cg) == "table" and (cg.UsesGunHandler == true or cg.UsesCorePackage == true)
 end
 
+function ghPreserveShootOrigin67()
+    if type(CurrentGame) ~= "table" then
+        return false
+    end
+    return CurrentGame.UsesGunHandler == true
+        or CurrentGame.HoodGame == true
+        or CurrentGame.UsesCorePackage == true
+end
+
 function hcEns()
     if not Mango or not Mango.Locals then
         return false
@@ -7135,7 +7238,7 @@ function beamWatch67()
 end
 
 function cbmGh67()
-    return ghFlow67() and cbmReady()
+    return ghFlow67() and cbmCanFire67()
 end
 
 function pushSrvHit(origin, weaponRange, hit, targetChar)
@@ -7161,6 +7264,12 @@ function pushSrvHit(origin, weaponRange, hit, targetChar)
     local pos, inst, norm = ghRay(payload, silentPos)
     if not pos then
         return
+    end
+    local resolvedPart = hcResolveHitPart(silentPos)
+    if resolvedPart then
+        inst = resolvedPart
+        pos = silentPos
+        norm = norm or Vector3.yAxis
     end
     local entry = {
         pos = pos,
@@ -7191,6 +7300,8 @@ function patchShootArgs(args)
     local queue = Mango.Locals._RainGhCbmServerHitQueue
     local single = Mango.Locals._RainGhCbmServerHit
     if type(args[4]) == "table" and type(args[4][1]) == "table" and args[4][1].Result1 ~= nil then
+        local patchedCount = 0
+        local syncHit = nil
         for i, pellet in ipairs(args[4]) do
             local pending = queue and queue[i]
             if type(pending) == "table" and typeof(pending.pos) == "Vector3" and tick() <= (pending.expire or 0) then
@@ -7201,11 +7312,18 @@ function patchShootArgs(args)
                 if pending.norm ~= nil then
                     pellet.Result3 = pending.norm
                 end
+                if syncHit == nil then
+                    syncHit = pending.pos
+                end
+                patchedCount = patchedCount + 1
             end
+        end
+        if patchedCount > 0 and typeof(args[3]) == "Vector3" and typeof(syncHit) == "Vector3" then
+            pcall(ghSyncMousePos67, syncHit, args[3], tonumber(args[8]))
         end
         Mango.Locals._RainGhCbmServerHitQueue = nil
         Mango.Locals._RainGhCbmServerHit = nil
-        return true
+        return patchedCount > 0
     end
     local pending = single
     if type(queue) == "table" and queue[1] then
@@ -7236,6 +7354,9 @@ function patchShootArgs(args)
         end
     else
         return false
+    end
+    if typeof(args[3]) == "Vector3" and typeof(pending.pos) == "Vector3" then
+        pcall(ghSyncMousePos67, pending.pos, args[3], tonumber(args[8]))
     end
     Mango.Locals._RainGhCbmServerHitQueue = nil
     Mango.Locals._RainGhCbmServerHit = nil
@@ -7892,7 +8013,7 @@ function patchGhSilentShootGun67(args, argc)
     -- Classic ShootGun: origin, hitPos, hitPart, normal
     if typeof(args[4]) == "Vector3" or args[4] == nil then
         local n = argc or args.n or #args
-        if typeof(origin) == "Vector3" then
+        if typeof(origin) == "Vector3" and not ghPreserveShootOrigin67() then
             local d = hit - origin
             if d.Magnitude > 1e-4 then
                 args[3] = hit - d.Unit * 0.42
@@ -7926,6 +8047,9 @@ function patchGhSilentShootGun67(args, argc)
 end
 
 function hcPatchShootGunArgs(args, argc)
+    if ghPreserveShootOrigin67() then
+        return patchGhSilentShootGun67(args, argc)
+    end
     if type(args) ~= "table" or args[1] ~= "ShootGun" then
         return false
     end
@@ -7982,6 +8106,8 @@ function rainPatchShootGunArgs(args, argc)
     end
     if not patched then
         if patchShootArgs(args) then
+            patched = true
+        elseif patchGhSilentShootGun67(args, argc) then
             patched = true
         elseif type(CurrentGame) == "table" and CurrentGame.UsesHoodCustoms == true then
             patched = hcPatchMainEventArgs(args, argc) == true
@@ -8276,6 +8402,7 @@ function applyCbm(payload)
     if cbmSplit() and typeof(hitPos) == "Vector3" then
         hitPos = silentAimPt(origin, hitPos, shooter, weaponRange, targetChar)
         Mango.Locals.HitPosition = hitPos
+        pcall(ghSyncMousePos67, hitPos, origin, weaponRange)
         pcall(cbmFromAim, origin, weaponRange, hitPos, targetChar)
     end
     local function applyLegit(target)
@@ -19870,7 +19997,7 @@ local function rainBuildStimController(initialCfg)
         local _desyncOn = false
         local _desyncCF, _desyncRoot, _desyncPad = nil, nil, nil
         local _desyncHb = nil
-        local _stimKW = { "stim", "steroid", "med", "heal", "inject", "adren" }
+        local _stimKW = { "stim", "steroid", "med", "heal", "inject", "adren", "health" }
         local _failStreak = 0
         local _crouchHeld = false
         local _safeHome = nil
@@ -19950,6 +20077,9 @@ local function rainBuildStimController(initialCfg)
 
         local function nameHasStim(nm)
             nm = string.lower(nm)
+            if string.find(nm, "shotgun", 1, true) or string.find(nm, "revolver", 1, true) then
+                return false
+            end
             for i = 1, #_stimKW do
                 if string.find(nm, _stimKW[i], 1, true) then
                     return true
@@ -20519,6 +20649,21 @@ local function rainBuildStimController(initialCfg)
             return okBuy and false
         end
 
+        local function tryUseStimLowHp()
+            if not stimEnabled or _isRespawning or isDead() or _buying or _using then
+                return false
+            end
+            refreshChar()
+            if not _hum or _hum.MaxHealth <= 0 or _hum.Health <= 5 then
+                return false
+            end
+            if healthPct() <= cfg.lowHealthThreshold and countStims() > 0 then
+                useStim()
+                return true
+            end
+            return false
+        end
+
         local function manageStims()
             if not stimEnabled or _isRespawning or isDead() or _buying or _using then
                 return
@@ -20529,12 +20674,6 @@ local function rainBuildStimController(initialCfg)
             end
             local need = stockTarget()
             local cur = countStims()
-            local pct = healthPct()
-
-            if pct <= cfg.lowHealthThreshold and _hum.Health > 5 and cur > 0 then
-                useStim()
-                return
-            end
 
             if cur < need then
                 if inCombat() and cur > 0 then
@@ -20623,8 +20762,10 @@ local function rainBuildStimController(initialCfg)
                     local now = tick()
                     refreshChar()
                     if stimEnabled and not _isRespawning and not isDead() and not _buying
-                        and now >= _buyLockUntil and not _SD_IsCombatBusy() then
-                        if now - lastMaintain >= (cfg.maintainDelay or 0.85) then
+                        and now >= _buyLockUntil then
+                        tryUseStimLowHp()
+                        if not _SD_IsCombatBusy()
+                            and now - lastMaintain >= (cfg.maintainDelay or 0.85) then
                             lastMaintain = now
                             if _root and (not _shopPart or distXZ(_root.Position, _shopPart.Position) > 14) then
                                 _safeHome = _root.CFrame
@@ -20658,6 +20799,10 @@ local function rainBuildStimController(initialCfg)
 end
 
 function rainAutoStimCfg67()
+    local dh = type(desHoodCfg67) == "function" and desHoodCfg67() or nil
+    if type(dh) == "table" and type(dh["Auto Stim"]) == "table" then
+        return dh["Auto Stim"]
+    end
     local rage = shared.rain and shared.rain.Rage
     if type(rage) ~= "table" then
         return nil
@@ -32219,6 +32364,9 @@ end))
         end
         if typeof(Mango.Locals.HitPosition) ~= "Vector3" or Mango.Locals.HitPosition.Magnitude <= 1e-4 then
             return false
+        end
+        if cbmOn() then
+            return typeof(origin) == "Vector3"
         end
         if not hcEns() then
             return false
