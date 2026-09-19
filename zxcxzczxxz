@@ -4,6 +4,52 @@
 	Config comes only from the website (/api/bootstrap + live sync).
 ]]
 
+local function rainWebPickGlobalString(v)
+	if type(v) ~= "string" then
+		return nil
+	end
+	local s = v:match("^%s*(.-)%s*$") or ""
+	if s == "" or s == "nil" then
+		return nil
+	end
+	return s
+end
+
+-- Luarmor/Potassium often isolate getgenv(); keys set before loadstring live in getrenv/_G.
+local function rainWebReadGlobal(name)
+	if typeof(getgenv) == "function" then
+		local ok, v = pcall(function()
+			return getgenv()[name]
+		end)
+		if ok then
+			v = rainWebPickGlobalString(v)
+			if v then
+				return v
+			end
+		end
+	end
+	if typeof(getrenv) == "function" then
+		local ok, env = pcall(getrenv)
+		if ok and type(env) == "table" then
+			local v = rainWebPickGlobalString(env[name])
+			if v then
+				return v
+			end
+		end
+	end
+	local ok, v = pcall(function()
+		return _G[name]
+	end)
+	if ok then
+		v = rainWebPickGlobalString(v)
+		if v then
+			return v
+		end
+	end
+	return rainWebPickGlobalString(_ENV and _ENV[name] or nil)
+		or rainWebPickGlobalString(rawget and rawget(_G, name) or nil)
+end
+
 if typeof(getgenv) == "function" then
 	local g = getgenv()
 	g.RAIN_WEB = true
@@ -12,18 +58,21 @@ if typeof(getgenv) == "function" then
 	-- rainweb never loads the in-game menu UI
 	g.RainTableNoUI = true
 	g._RAIN_LOAD_UI = false
-	local lk = g.LOADER_KEY
-	if (type(lk) ~= "string" or lk == "") and type(LOADER_KEY) == "string" then
-		lk = LOADER_KEY
-	end
+	local lk = rainWebReadGlobal("RAIN_LOADER_KEY") or rainWebReadGlobal("LOADER_KEY")
 	if type(lk) == "string" and lk ~= "" then
 		g.LOADER_KEY = lk
 		g.RAIN_LOADER_KEY = lk
+		LOADER_KEY = lk
 	end
 	g.RAIN_LOADER_KEY = g.RAIN_LOADER_KEY or ""
+	local sk = rainWebReadGlobal("script_key")
+	if type(sk) == "string" and sk ~= "" then
+		g.script_key = sk
+		script_key = sk
+	end
 end
 
-script_key = (typeof(getgenv) == "function" and getgenv().script_key) or script_key or "place ur key here"
+script_key = rainWebReadGlobal("script_key") or script_key or "place ur key here"
 
 -- Empty on purpose: website injects/fills shared.rain
 shared.rain = {}
@@ -66,13 +115,28 @@ do
 		local HttpService = game:GetService("HttpService")
 		local headers = { ["Accept"] = "application/json" }
 		local reqOpts = { Url = url, Method = "GET", Headers = headers }
+		local bestCode, bestBody = nil, ""
+
+		local function consider(code, body)
+			code = tonumber(code)
+			body = type(body) == "string" and body or ""
+			if body ~= "" and code then
+				return code, body, true
+			end
+			if code and (bestCode == nil or (bestBody == "" and body ~= "")) then
+				bestCode, bestBody = code, body
+			end
+			return nil, nil, false
+		end
 
 		-- Executor HTTP first — Opiumware and others block HttpService:RequestAsync.
 		if type(request) == "function" then
 			local ok, res = pcall(request, reqOpts)
 			if ok then
 				local code, body = rainWebHttpFromRequestTable(res)
-				if code then
+				local done
+				code, body, done = consider(code, body)
+				if done then
 					return code, body
 				end
 				if type(res) == "string" and res ~= "" then
@@ -84,7 +148,9 @@ do
 			local ok, res = pcall(http_request, reqOpts)
 			if ok then
 				local code, body = rainWebHttpFromRequestTable(res)
-				if code then
+				local done
+				code, body, done = consider(code, body)
+				if done then
 					return code, body
 				end
 			end
@@ -97,7 +163,9 @@ do
 			local ok, res = pcall(synLib.request, reqOpts)
 			if ok then
 				local code, body = rainWebHttpFromRequestTable(res)
-				if code then
+				local done
+				code, body, done = consider(code, body)
+				if done then
 					return code, body
 				end
 			end
@@ -139,10 +207,15 @@ do
 			if ok and type(res) == "table" then
 				local code = tonumber(res.StatusCode) or 0
 				local body = type(res.Body) == "string" and res.Body or ""
-				if body ~= "" or code > 0 then
+				local done
+				code, body, done = consider(code, body)
+				if done then
 					return code, body
 				end
 			end
+		end
+		if bestCode then
+			return bestCode, bestBody
 		end
 		return nil, nil
 	end
@@ -209,11 +282,29 @@ do
 		if s == "" or s == "nil" then
 			return ""
 		end
+		if (s:sub(1, 1) == '"' and s:sub(-1) == '"') or (s:sub(1, 1) == "'" and s:sub(-1) == "'") then
+			s = s:sub(2, -2):match("^%s*(.-)%s*$") or ""
+		end
 		local low = string.lower(s)
 		if low == "place ur key here" or low == "place your key here" or low == "your_loader_key" then
 			return ""
 		end
 		return s
+	end
+
+	local function rainWebClientScriptKey(env)
+		return rainWebNormKey(rainWebReadGlobal("script_key"))
+			or rainWebNormKey(env and env.script_key)
+			or rainWebNormKey(script_key)
+	end
+
+	local function rainWebAuthQuery(HttpService, tryKey, mode, env)
+		local q = "key=" .. HttpService:UrlEncode(tryKey) .. "&mode=" .. HttpService:UrlEncode(mode)
+		local sk = rainWebClientScriptKey(env)
+		if sk ~= "" then
+			q = q .. "&script_key=" .. HttpService:UrlEncode(sk)
+		end
+		return q
 	end
 
 	local function rainWebCollectKeys(env)
@@ -225,11 +316,12 @@ do
 				out[#out + 1] = k
 			end
 		end
+		-- Loader key first — Rain dashboard auth (Luarmor script_key alone may be unlinked on site).
+		add(rainWebReadGlobal("RAIN_LOADER_KEY"))
+		add(rainWebReadGlobal("LOADER_KEY"))
 		add(env.RAIN_LOADER_KEY)
 		add(env.LOADER_KEY)
-		if type(LOADER_KEY) == "string" then
-			add(LOADER_KEY)
-		end
+		add(rainWebReadGlobal("script_key"))
 		add(env.script_key)
 		add(script_key)
 		return out
@@ -274,7 +366,7 @@ do
 		local bootOk = false
 		local lastStatus, lastErrMsg
 		for _, tryKey in ipairs(keys) do
-			local bootUrl = base .. "/api/bootstrap?key=" .. HttpService:UrlEncode(tryKey) .. "&mode=" .. HttpService:UrlEncode(mode)
+			local bootUrl = base .. "/api/bootstrap?" .. rainWebAuthQuery(HttpService, tryKey, mode, g)
 			local status, body = rainWebHttpGet(bootUrl)
 			lastStatus = status
 			if type(body) == "string" and body ~= "" then
@@ -327,10 +419,10 @@ do
 			local HttpService = game:GetService("HttpService")
 			local lastRevision = (typeof(getgenv) == "function" and tonumber(getgenv()._RAIN_WEB_REVISION)) or 0
 			local function ping()
-				rainWebHttpGet(base .. "/api/heartbeat?key=" .. HttpService:UrlEncode(key))
+				rainWebHttpGet(base .. "/api/heartbeat?" .. rainWebAuthQuery(HttpService, key, mode, g))
 			end
 			local function pull()
-				local url = base .. "/api/live-config?key=" .. HttpService:UrlEncode(key) .. "&mode=" .. HttpService:UrlEncode(mode)
+				local url = base .. "/api/live-config?" .. rainWebAuthQuery(HttpService, key, mode, g)
 				local _, raw = rainWebHttpGet(url)
 				if not raw or raw == "" then
 					return
@@ -32411,7 +32503,8 @@ end))
         if not ghFlow67() then
             return false
         end
-        if not shared.rain.SilentAim.Enabled then
+        local saCfg = type(shared.rain) == "table" and shared.rain.SilentAim
+        if type(saCfg) ~= "table" or not saCfg.Enabled then
             return false
         end
         if not getSaPlr() then
@@ -32442,7 +32535,8 @@ end))
         if not sprOn() then
             return false
         end
-        if shared.rain.SilentAim.Enabled and getSaPlr() and typeof(Mango.Locals.HitPosition) == "Vector3" then
+        local saCfg = type(shared.rain) == "table" and shared.rain.SilentAim
+        if type(saCfg) == "table" and saCfg.Enabled and getSaPlr() and typeof(Mango.Locals.HitPosition) == "Vector3" then
             return false
         end
         return true
@@ -32479,13 +32573,17 @@ end))
             end
             -- GunClient / GunClientShotgun read getAim's 2nd return with a fixed type:
             -- pistols use bool (FindFirstChild recursive / hit flags), shotguns use Instance.
-            -- Never cross those types or GunClient throws "Unable to cast Instance to bool".
-            local function ghAimSecondKind67(second, gunCat)
-                if gunCat == "Pistol" or gunCat == "Sniper" or gunCat == "Burst" then
-                    return "bool"
+            -- Des/Glitch Des Hood GunHandler.shoot uses math.min on a numeric 2nd return — never bool.
+            local function ghAimNumericSecondGame67()
+                if type(CurrentGame) ~= "table" then
+                    return false
                 end
-                if gunCat == "Shotgun" or gunCat == "Auto" then
-                    return "instance"
+                local n = CurrentGame.Name
+                return n == "Des Hood" or n == "Glitch Des Hood" or n == "Das Hood"
+            end
+            local function ghAimSecondKind67(second, gunCat)
+                if type(second) == "number" or ghAimNumericSecondGame67() then
+                    return "number"
                 end
                 if type(second) == "boolean" then
                     return "bool"
@@ -32493,8 +32591,11 @@ end))
                 if typeof(second) == "Instance" then
                     return "instance"
                 end
-                if type(second) == "number" then
-                    return "number"
+                if gunCat == "Pistol" or gunCat == "Sniper" or gunCat == "Burst" then
+                    return "bool"
+                end
+                if gunCat == "Shotgun" or gunCat == "Auto" then
+                    return "instance"
                 end
                 return nil
             end
@@ -32504,6 +32605,7 @@ end))
                 end
                 packed[1] = dir
                 local second = packed[2]
+                mag = tonumber(mag) or 0
                 local hasHit = typeof(hitPos) == "Vector3" and mag >= 1e-4
                 local part = hasHit and type(hcResolveHitPart) == "function" and hcResolveHitPart(hitPos) or nil
                 local gunCat = nil
@@ -32514,14 +32616,19 @@ end))
                     end
                 end
                 local kind = ghAimSecondKind67(second, gunCat)
-                if kind == "bool" then
+                if kind == "number" then
+                    local cap = tonumber(second)
+                    if cap and cap > 0 then
+                        packed[2] = math.min(mag, cap)
+                    else
+                        packed[2] = mag
+                    end
+                elseif kind == "bool" then
                     packed[2] = hasHit
                 elseif kind == "instance" then
                     if part then
                         packed[2] = part
                     end
-                elseif kind == "number" then
-                    packed[2] = mag
                 end
                 return table.unpack(packed, 1, packed.n)
             end
