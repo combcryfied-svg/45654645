@@ -201,6 +201,64 @@ do
 		end
 	end
 
+	local function rainWebNormKey(v)
+		if v == nil then
+			return ""
+		end
+		local s = tostring(v):match("^%s*(.-)%s*$") or ""
+		if s == "" or s == "nil" then
+			return ""
+		end
+		local low = string.lower(s)
+		if low == "place ur key here" or low == "place your key here" or low == "your_loader_key" then
+			return ""
+		end
+		return s
+	end
+
+	local function rainWebCollectKeys(env)
+		local out, seen = {}, {}
+		local function add(v)
+			local k = rainWebNormKey(v)
+			if k ~= "" and not seen[k] then
+				seen[k] = true
+				out[#out + 1] = k
+			end
+		end
+		add(env.RAIN_LOADER_KEY)
+		add(env.LOADER_KEY)
+		if type(LOADER_KEY) == "string" then
+			add(LOADER_KEY)
+		end
+		add(env.script_key)
+		add(script_key)
+		return out
+	end
+
+	local function rainWebBootstrapErrMsg(data, status)
+		if type(data) == "table" and type(data.error) == "string" then
+			local e = data.error
+			if e == "invalid key" then
+				return "Key not recognized — paste the full Loader tab snippet from getrain.club (LOADER_KEY + script_key)"
+			elseif e == "license expired" then
+				return "Luarmor license expired — renew on Luarmor, then refresh getrain.club"
+			elseif e == "license banned" then
+				return "Luarmor license banned"
+			elseif e == "banned" then
+				return "getrain.club account banned"
+			end
+			return e
+		end
+		if status == 403 then
+			return "Invalid key or license — copy LOADER_KEY from getrain.club (Loader tab)"
+		elseif status == 404 then
+			return "Key not found — log in at getrain.club and copy your loader key"
+		elseif status and status > 0 then
+			return "HTTP " .. tostring(status)
+		end
+		return "Could not reach server — check HttpService / executor HTTP, or game HTTP block"
+	end
+
 	local g = typeof(getgenv) == "function" and getgenv() or {}
 	local base = tostring(g.RAIN_WEB_URL or "https://getrain.club"):gsub("/$", "")
 	-- Prefer HTTPS; upgrade legacy http://getrain.club URLs.
@@ -208,60 +266,60 @@ do
 		base = "https://getrain.club"
 	end
 	local mode = tostring(g.RAIN_WEB_MODE or "rage")
-	local key = tostring(g.RAIN_LOADER_KEY or g.LOADER_KEY or "")
-	if (key == "" or key == "nil") and type(LOADER_KEY) == "string" then
-		key = LOADER_KEY
-	end
-	if key == "" or key == "nil" then
-		key = tostring(g.script_key or script_key or "")
-		if key == "place ur key here" or key == "place your key here" then
-			key = ""
-		end
-	end
+	local keys = rainWebCollectKeys(g)
+	local key = keys[1] or ""
 
-	if key ~= "" and key ~= "nil" then
+	if key ~= "" then
 		local HttpService = game:GetService("HttpService")
-		local bootUrl = base .. "/api/bootstrap?key=" .. HttpService:UrlEncode(key) .. "&mode=" .. HttpService:UrlEncode(mode)
-		local status, body = rainWebHttpGet(bootUrl)
 		local bootOk = false
-		if type(body) == "string" and body ~= "" then
-			local ok, data = pcall(function()
-				return HttpService:JSONDecode(body)
-			end)
-			if ok and type(data) == "table" and type(data.rain) == "table" then
-				bootOk = true
-				if type(data.script_key) == "string" and data.script_key ~= "" then
-					script_key = data.script_key
+		local lastStatus, lastErrMsg
+		for _, tryKey in ipairs(keys) do
+			local bootUrl = base .. "/api/bootstrap?key=" .. HttpService:UrlEncode(tryKey) .. "&mode=" .. HttpService:UrlEncode(mode)
+			local status, body = rainWebHttpGet(bootUrl)
+			lastStatus = status
+			if type(body) == "string" and body ~= "" then
+				local ok, data = pcall(function()
+					return HttpService:JSONDecode(body)
+				end)
+				if ok and type(data) == "table" and type(data.rain) == "table" then
+					bootOk = true
+					key = tryKey
+					if type(data.script_key) == "string" and data.script_key ~= "" then
+						script_key = data.script_key
+						if typeof(getgenv) == "function" then
+							getgenv().script_key = data.script_key
+						end
+					end
+					shared.rain = data.rain
+					shared.rain["Web Configs"] = {
+						Enabled = true,
+						["API Key"] = key,
+						["Server URL"] = base,
+						Mode = mode,
+					}
+					shared.Rain = shared.rain
+					rainWebForceNoUI()
 					if typeof(getgenv) == "function" then
-						getgenv().script_key = data.script_key
+						getgenv()._RAIN_WEB_REVISION = tonumber(data.revision) or 0
+					end
+					break
+				end
+				if ok and type(data) == "table" then
+					lastErrMsg = rainWebBootstrapErrMsg(data, status)
+					-- Wrong loader key but another candidate may work; license issues apply to all keys for this account.
+					if status == 403 and data.error == "invalid key" then
+						continue
 					end
 				end
-				shared.rain = data.rain
-				shared.rain["Web Configs"] = {
-					Enabled = true,
-					["API Key"] = key,
-					["Server URL"] = base,
-					Mode = mode,
-				}
-				shared.Rain = shared.rain
-				rainWebForceNoUI()
-				if typeof(getgenv) == "function" then
-					getgenv()._RAIN_WEB_REVISION = tonumber(data.revision) or 0
-				end
-			elseif ok and type(data) == "table" and type(data.error) == "string" then
-				warn("[Rain Web] " .. base .. " — " .. tostring(data.error))
+			else
+				lastErrMsg = rainWebBootstrapErrMsg(nil, status)
+			end
+			if status == 403 and lastErrMsg and not lastErrMsg:find("not recognized", 1, true) then
+				break
 			end
 		end
 		if not bootOk then
-			if status == 403 then
-				warn("[Rain Web] Invalid key or license — copy LOADER_KEY from getrain.club (Loader tab)")
-			elseif status == 404 then
-				warn("[Rain Web] Key not found — log in at getrain.club and copy your loader key")
-			elseif status and status > 0 then
-				warn("[Rain Web] " .. base .. " returned HTTP " .. tostring(status))
-			else
-				warn("[Rain Web] Could not reach " .. base .. " — check HttpService / executor HTTP, or game HTTP block")
-			end
+			warn("[Rain Web] " .. base .. " — " .. (lastErrMsg or rainWebBootstrapErrMsg(nil, lastStatus)))
 			rainWebSkeletonDefaults()
 		end
 
