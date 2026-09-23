@@ -848,6 +848,9 @@ function drinkpeeplolagmsngr(payload)
     if type(payload) ~= "table" then
         return
     end
+    if wetzhdlolg67() then
+        return
+    end
     local wetsealolcfgwowza = fattealolcfg67()
     local gm = wetsealolcfgwowza and wetsealolcfgwowza["Gun Mods"]
     local agm = gm and gm["Advanced Gun Mods"]
@@ -3115,6 +3118,34 @@ function byesocklolsnea67(fromEnabled)
     Mango.Locals.NameEspActive = fromEnabled == true
 end
 
+function gumjoellolnesclr67()
+    if typeof(getgenv) == "function" and type(getgenv()._RainClearNameESP) == "function" then
+        pcall(getgenv()._RainClearNameESP)
+    elseif type(Mango) == "table" and type(Mango._midfroglolcnes333) == "function" then
+        pcall(Mango._midfroglolcnes333)
+    end
+end
+
+function rugziplolnesgetrain()
+    yeebeelolsaen67()
+    local espCfg = shared.rain and shared.rain["Name ESP"]
+    local espOn = type(espCfg) == "table" and espCfg.Enabled == true
+    if type(byesocklolsnea67) == "function" then
+        pcall(byesocklolsnea67, espOn)
+    elseif type(Mango) == "table" and type(Mango.Locals) == "table" then
+        Mango.Locals.NameEspActive = espOn
+    end
+    if not espOn then
+        gumjoellolnesclr67()
+        return
+    end
+    if typeof(getgenv) == "function" and type(getgenv()._RainRefreshNameESP) == "function" then
+        pcall(getgenv()._RainRefreshNameESP)
+    elseif type(Mango) == "table" and type(Mango.fishbiglolegetrain) == "function" then
+        pcall(Mango.fishbiglolegetrain, true)
+    end
+end
+
 function badpieloltnewowzers()
     if not hothoplolefewowzers() then
         return false
@@ -5351,6 +5382,9 @@ end
 
 -- Re-read shared.rain after website Apply / live-config pull (no re-execute).
 function zapdrinklolalcgetrain()
+    if type(yeetoylolschfgetrain) == "function" then
+        pcall(yeetoylolschfgetrain)
+    end
     if type(fishboatlolnorgetrain) == "function" then
         pcall(fishboatlolnorgetrain)
     end
@@ -5400,17 +5434,8 @@ function zapdrinklolalcgetrain()
     if type(g.notreelolrvhswowza) == "function" then
         pcall(g.notreelolrvhswowza)
     end
-    local espCfg = shared.rain and shared.rain["Name ESP"]
-    if type(byesocklolsnea67) == "function" then
-        pcall(byesocklolsnea67, type(espCfg) == "table" and espCfg.Enabled == true)
-    elseif type(Mango) == "table" and type(Mango.Locals) == "table" then
-        Mango.Locals.NameEspActive = type(espCfg) == "table" and espCfg.Enabled == true
-    end
-    local refreshEsp = g._RainRefreshNameESP
-    if type(refreshEsp) == "function" then
-        pcall(refreshEsp)
-    elseif type(Mango) == "table" and type(Mango.fishbiglolegetrain) == "function" then
-        pcall(Mango.fishbiglolegetrain, true)
+    if type(rugziplolnesgetrain) == "function" then
+        pcall(rugziplolnesgetrain)
     end
     if type(cowsitlolsahwowzers) == "function" then
         pcall(cowsitlolsahwowzers)
@@ -8066,6 +8091,14 @@ function sithilolf333()
     return type(cg) == "table" and (cg.UsesGunHandler == true or cg.UsesCorePackage == true)
 end
 
+function wetzhdlolg67()
+    if type(CurrentGame) == "table" and CurrentGame.Name == "ZHD" then
+        return true
+    end
+    local gid, pid = game.GameId, game.PlaceId
+    return gid == 10187603664 or pid == 10187603664
+end
+
 function teapiglolpso67()
     if type(CurrentGame) ~= "table" then
         return false
@@ -8424,6 +8457,10 @@ function nahboxlolgshq333()
     if hiruglolgngr() then
         return true
     end
+    -- ZHD validates client vs server weapon data; patching ShootGun remotes without CBM causes kicks.
+    if wetzhdlolg67() then
+        return false
+    end
     local sa = shared.rain and shared.rain.SilentAim
     return type(sa) == "table" and sa.Enabled == true and noeyelola67()
 end
@@ -8589,7 +8626,8 @@ function pawbrulolhmhcwowzers(worldPos)
         local origin = cam.CFrame.Position
         local delta = worldPos - origin
         if delta.Magnitude > 1e-4 then
-            return CFrame.lookAt(origin, worldPos)
+            -- Mouse.Hit must sit on the aim point (not at the camera), LookVector along the ray.
+            return CFrame.new(worldPos, worldPos + delta.Unit)
         end
     end
     return CFrame.new(worldPos)
@@ -8691,7 +8729,10 @@ function drysnaillolrp333()
     then
         return nil
     end
-    if not shared.rain.SilentAim.Enabled then
+    if not icecowlolegetrain("SilentAim.Enabled") then
+        return nil
+    end
+    if type(noeyelola67) == "function" and not noeyelola67() then
         return nil
     end
     local aimPlayer = fatwavelolsp333()
@@ -8702,8 +8743,6 @@ function drysnaillolrp333()
         if not gudyuhlolicwowza() and not yuhwormlolccwowzers(aimPlayer.Character) then
             return nil
         end
-    elseif not noeyelola67() then
-        return nil
     end
     -- Use the PreRender cache only. Calling bedcarlolghpwowzers here freezes the game:
     -- GunClient / Framework read Mouse.Hit/Target many times per frame, and Best Point
@@ -11408,6 +11447,16 @@ if not Games[game.PlaceId] and Games[game.GameId] then
 end
 if Games[10187603664] and game.GameId == 10187603664 and not Games[game.PlaceId] then
     Games[game.PlaceId] = Games[10187603664]
+end
+if Games[10187603664] and not Games[10764730172] then
+    Games[10764730172] = Games[10187603664]
+end
+
+if Games[10766871486] and game.GameId == 10766871486 and not Games[game.PlaceId] then
+    Games[game.PlaceId] = Games[10766871486]
+end
+if Games[10766871486] and not Games[10765456143] then
+    Games[10765456143] = Games[10766871486]
 end
 
 if Games[10765980155] and not Games[10765129399] then
@@ -14198,8 +14247,10 @@ end
             local bigsnaillolep333 = {}
             local dryhaylolnec67 = 0
             local tearunlolnamegetrain = 1 / 45
+            local nameEspClearedWhenOff = false
 
             function Mango._midfroglolcnes333()
+                nameEspClearedWhenOff = true
                 local drawings = Mango.Visuals.NameESP
                 if type(drawings) ~= "table" then
                     Mango.Visuals.NameESP = {}
@@ -14306,11 +14357,19 @@ end
                 local espCfg = shared.rain["Name ESP"]
                 local nameEsp = Mango.Visuals.NameESP
                 if not dryhayloleawowza() then
-                    for player, draw in pairs(nameEsp) do
-                        legcuplolned333(player, draw)
+                    if not nameEspClearedWhenOff then
+                        nameEspClearedWhenOff = true
+                        if type(Mango._midfroglolcnes333) == "function" then
+                            pcall(Mango._midfroglolcnes333)
+                        else
+                            for player, draw in pairs(nameEsp) do
+                                legcuplolned333(player, draw)
+                            end
+                        end
                     end
                     return
                 end
+                nameEspClearedWhenOff = false
 
                 local dogtaplolsettwowza = type(espCfg.Settings) == "table" and espCfg.Settings or {}
                 local colors = type(dogtaplolsettwowza["Color Settings"]) == "table" and dogtaplolsettwowza["Color Settings"] or {}
@@ -14396,9 +14455,6 @@ end
             end
 
             gotealolcwowza(RunService.Heartbeat:Connect(function()
-                if type(hothoplolefewowzers) == "function" and not dryhayloleawowza() then
-                    return
-                end
                 if type(Mango.fishbiglolegetrain) == "function" then
                     pcall(Mango.fishbiglolegetrain)
                 end
@@ -20101,12 +20157,14 @@ local nv = typeof(LPH_NO_VIRTUALIZE) == "function" and LPH_NO_VIRTUALIZE or func
 function batdryloldhgngr()
     if game.PlaceId == 100702124803290
         or game.PlaceId == 133839265368468
-        or game.PlaceId == 10765456143
+        or game.PlaceId == 10766871486
+        or game.PlaceId == 10187603664
         or game.GameId == 10763035106
         or game.GameId == 10725680211
         or game.GameId == 10742768788
         or game.GameId == 10765630591
-        or game.GameId == 10765456143 then
+        or game.GameId == 10766871486
+        or game.GameId == 10187603664 then
         return true
     end
     if type(CurrentGame) == "table"
@@ -27749,7 +27807,7 @@ function pieducklolk333()
         local fg = math.floor(fallback.G * 255 + 0.5)
         local fb = math.floor(fallback.B * 255 + 0.5)
         return string.format(
-            '<font color="foxuwulolrgbwowzers(%d,%d,%d)">%s</font>',
+            '<font color="rgb(%d,%d,%d)">%s</font>',
             fr, fg, fb, sandhatlolrt333(txt)
         )
     end
@@ -27995,7 +28053,7 @@ function pieducklolk333()
         local rowC = timnololrcwowzers(row, activeC)
         local ar, ag, ab = trainhoplolctrgetrain(rowC, 255, 255, 255)
         local labelTxt = sandhatlolrt333(row.rugooflollabe333)
-        local rich = string.format('<font color="foxuwulolrgbwowzers(%d,%d,%d)">%s</font>', ar, ag, ab, labelTxt)
+        local rich = string.format('<font color="rgb(%d,%d,%d)">%s</font>', ar, ag, ab, labelTxt)
         if row.getTarget then
             local okT, tgt = pcall(row.getTarget)
             if okT and tgt and tgt.Parent then
@@ -28004,7 +28062,7 @@ function pieducklolk333()
                     name = string.lower(name)
                     local tr, tg, tb = trainhoplolctrgetrain(tgtNameC, 255, 255, 255)
                     rich = rich .. string.format(
-                        ' <font color="foxuwulolrgbwowzers(%d,%d,%d)">&lt;%s&gt;</font>',
+                        ' <font color="rgb(%d,%d,%d)">&lt;%s&gt;</font>',
                         tr, tg, tb, sandhatlolrt333(name)
                     )
                 end
@@ -28156,12 +28214,12 @@ function pieducklolk333()
             targetStatsLbl.RichText = true
             if knocked then
                 local krr, kgg, kbb = trainhoplolctrgetrain(offC, 255, 80, 80)
-                targetStatsLbl.Text = string.format('<font color="foxuwulolrgbwowzers(%d,%d,%d)">knocked</font>', krr, kgg, kbb)
+                targetStatsLbl.Text = string.format('<font color="rgb(%d,%d,%d)">knocked</font>', krr, kgg, kbb)
             else
                 local hrr, hgg, hbb = trainhoplolctrgetrain(healthC, 255, 255, 255)
                 local arr, agg, abb = trainhoplolctrgetrain(armorC, 255, 255, 255)
                 targetStatsLbl.Text = string.format(
-                    '<font color="foxuwulolrgbwowzers(255,255,255)">health </font><font color="foxuwulolrgbwowzers(%d,%d,%d)">%d</font><font color="foxuwulolrgbwowzers(255,255,255)"> armor </font><font color="foxuwulolrgbwowzers(%d,%d,%d)">%d</font>',
+                    '<font color="rgb(255,255,255)">health </font><font color="rgb(%d,%d,%d)">%d</font><font color="rgb(255,255,255)"> armor </font><font color="rgb(%d,%d,%d)">%d</font>',
                     hrr, hgg, hbb, seahatlolsingr(hp, 0), arr, agg, abb, seahatlolsingr(armor, 0)
                 )
             end
@@ -28170,7 +28228,7 @@ function pieducklolk333()
             targetStatsLbl.RichText = true
             local trr, tgg, tbb = trainhoplolctrgetrain(tgtC, 255, 255, 255)
             targetStatsLbl.Text = string.format(
-                '<font color="foxuwulolrgbwowzers(255,255,255)">target </font><font color="foxuwulolrgbwowzers(%d,%d,%d)">&lt;%s&gt;</font>',
+                '<font color="rgb(255,255,255)">target </font><font color="rgb(%d,%d,%d)">&lt;%s&gt;</font>',
                 trr, tgg, tbb, sandhatlolrt333(string.lower(boxsealolpltgetrain))
             )
         else
@@ -35507,7 +35565,7 @@ function goicelolagetrain()
                 return true
             end
         end
-        if game.GameId == 10725680211 or game.GameId == 1008451066 or game.GameId == 10537905600 or game.GameId == 10764730172 or game.GameId == 10765129399 or game.GameId == 10765980155 then
+        if game.GameId == 10725680211 or game.GameId == 1008451066 or game.GameId == 10537905600 or game.GameId == 10187603664 or game.GameId == 10766871486 or game.GameId == 10765129399 or game.GameId == 10765980155 then
             return true
         end
         local shop = socktoylolsfwowza()
@@ -37206,7 +37264,7 @@ end))
                     if not payload.Shooter and Self and Self.Character then
                         payload.Shooter = Self.Character
                     end
-                    if payload.Handle then
+                    if payload.Handle and not wetzhdlolg67() then
                         local h = payload.Handle
                         local sn = h:GetAttribute("SkinName")
                         if type(sn) ~= "string" or sn == "" then
@@ -37317,8 +37375,12 @@ end))
                 end
                 if type(payload) == "table" and spreadLocalShot and sithilolf333()
                     and not (flyleglolihcg333() and smtaplolhmss333())
+                    and not wetzhdlolg67()
                 then
                     pcall(cupgudlolgppngr, payload)
+                end
+                if wetzhdlolg67() and spreadLocalShot and type(payload) == "table" and noeyelola67() then
+                    pcall(owlballlolamrngr, true)
                 end
                 if not hiruglolgngr() and batfrylolrwowza(payload) and not bruhatloleta67() then
                     ghLegitVisual = woofpeeplolv67(payload, ghSilentAim)
@@ -47402,6 +47464,9 @@ do
 
 	local function cowowllolracl67()
 		carrunlolftrcngr(flags)
+		if type(yeetoylolschfgetrain) == "function" then
+			pcall(yeetoylolschfgetrain)
+		end
 		if type(fishboatlolnorgetrain) == "function" then
 			pcall(fishboatlolnorgetrain)
 		end
@@ -47431,17 +47496,8 @@ do
 		if type(g.yaysunlolripl67) == "function" then
 			pcall(g.yaysunlolripl67)
 		end
-		local espCfg = shared.rain and shared.rain["Name ESP"]
-		if type(byesocklolsnea67) == "function" then
-			pcall(byesocklolsnea67, type(espCfg) == "table" and espCfg.Enabled == true)
-		elseif type(Mango) == "table" and type(Mango.Locals) == "table" then
-			Mango.Locals.NameEspActive = type(espCfg) == "table" and espCfg.Enabled == true
-		end
-		local refresh = g._RainRefreshNameESP
-		if type(refresh) == "function" then
-			pcall(refresh)
-		elseif type(Mango) == "table" and type(Mango.fishbiglolegetrain) == "function" then
-			pcall(Mango.fishbiglolegetrain, true)
+		if type(rugziplolnesgetrain) == "function" then
+			pcall(rugziplolnesgetrain)
 		end
 	end
 
@@ -48567,18 +48623,8 @@ do
 			end
 			if flag == "Name ESP.Enabled" then
 				task.defer(function()
-					byesocklolsnea67(value == true)
-					if value ~= true then
-						if typeof(getgenv) == "function" and type(getgenv()._RainClearNameESP) == "function" then
-							pcall(getgenv()._RainClearNameESP)
-						elseif type(Mango) == "table" and type(Mango._midfroglolcnes333) == "function" then
-							pcall(Mango._midfroglolcnes333)
-						end
-					end
-					if typeof(getgenv) == "function" and type(getgenv()._RainRefreshNameESP) == "function" then
-						pcall(getgenv()._RainRefreshNameESP)
-					elseif type(Mango) == "table" and type(Mango.fishbiglolegetrain) == "function" then
-						pcall(Mango.fishbiglolegetrain, true)
+					if type(rugziplolnesgetrain) == "function" then
+						pcall(rugziplolnesgetrain)
 					end
 				end)
 			end
