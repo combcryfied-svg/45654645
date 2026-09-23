@@ -648,6 +648,68 @@ function egggudlolhkmb67(text)
         or text:find("moderation", 1, true) ~= nil
 end
 
+if type(shared.rain) == "table" then
+    if shared.rain.SilentAim == nil and type(shared.rain.beepcuplolsangr) == "table" then
+        shared.rain.SilentAim = shared.rain.beepcuplolsangr
+    end
+    if shared.rain.TriggerBot == nil and type(shared.rain.gudeatloltb333) == "table" then
+        shared.rain.TriggerBot = shared.rain.gudeatloltb333
+    end
+    if type(shared.rain.SilentAim) ~= "table" then
+        shared.rain.SilentAim = { Enabled = false }
+    end
+    if type(shared.rain.TriggerBot) ~= "table" then
+        shared.rain.TriggerBot = { Enabled = false }
+    end
+end
+
+function yeebeelolsaen67()
+    local r = shared.rain
+    if type(r) ~= "table" then
+        shared.rain = {}
+        r = shared.rain
+    end
+    if type(r.beepcuplolsangr) == "table" and type(r.SilentAim) ~= "table" then
+        r.SilentAim = r.beepcuplolsangr
+    end
+    if type(r.gudeatloltb333) == "table" and type(r.TriggerBot) ~= "table" then
+        r.TriggerBot = r.gudeatloltb333
+    end
+    if type(r.SilentAim) ~= "table" then
+        r.SilentAim = { Enabled = false }
+    end
+    if type(r.TriggerBot) ~= "table" then
+        r.TriggerBot = { Enabled = false }
+    end
+    shared.Rain = r
+end
+
+function beepsaplolsae67()
+    yeebeelolsaen67()
+    local sa = shared.rain and shared.rain.SilentAim
+    return type(sa) == "table" and sa.Enabled == true
+end
+
+
+
+function egggudlolhkmb67(text)
+    text = tostring(text or ""):lower()
+    if text == "" then
+        return false
+    end
+    return text:find("origin", 1, true) ~= nil
+        or text:find("too fast", 1, true) ~= nil
+        or text:find("shouldn", 1, true) ~= nil
+        or text:find("should do that", 1, true) ~= nil
+        or text:find("don't think", 1, true) ~= nil
+        or text:find("do that", 1, true) ~= nil
+        or text:find("exploit", 1, true) ~= nil
+        or text:find("cheat", 1, true) ~= nil
+        or text:find("teleport", 1, true) ~= nil
+        or text:find("invalid", 1, true) ~= nil
+        or text:find("moderation", 1, true) ~= nil
+end
+
 do
     -- Adonis bypass must never hard-crash the script (nil typeof/table.find/getgc on some executors).
     local okType = typeof or type
@@ -1980,8 +2042,9 @@ function fishboatlolnorgetrain()
     hitbox.Visualize = hitbox.Visualize == true
     hitbox.Color = type(hitbox.Color) == "table" and hitbox.Color or { 0, 0, 0 }
     local buyArmor = util["Buy Armor"]
+    local buyArmorDefaultOn = not hayzipolrainweb67()
     if type(buyArmor) ~= "table" then
-        buyArmor = { Enabled = true, Keybind = "G" }
+        buyArmor = { Enabled = buyArmorDefaultOn, Keybind = "G" }
         util["Buy Armor"] = buyArmor
     end
     local rageTblBa = shared.rain.Rage
@@ -2004,7 +2067,7 @@ function fishboatlolnorgetrain()
         rageTblBa["Buy Armor"] = nil
     end
     if buyArmor.Enabled == nil then
-        buyArmor.Enabled = true
+        buyArmor.Enabled = buyArmorDefaultOn
     end
     buyArmor.Enabled = buyArmor.Enabled == true
     buyArmor.Keybind = tostring(buyArmor.Keybind or "G")
@@ -2878,8 +2941,9 @@ function fishboatlolnorgetrain()
     if type(rage["Kill All"]) == "table" then
         rage["Kill All"]["Actions"] = dhKill["Actions"]
     end
+    local vcEnabledDefault = hayzipolrainweb67() and false or true
     local dhValueChanger = {
-        ["Enabled"] = frogleglolp333("Value Changer Enabled", dhVC, "Enabled", true) == true,
+        ["Enabled"] = frogleglolp333("Value Changer Enabled", dhVC, "Enabled", vcEnabledDefault) == true,
         ["Armor Value"] = hotpiglolas333(frogleglolp333("Armor Value", dhVC, "Armor Value", "9e9"), "9e9"),
         ["Muscle Value"] = hotpiglolas333(frogleglolp333("Muscle Value", dhVC, "Muscle Value", "150000"), "150000"),
         ["Apply Armor Keybind"] = tostring(frogleglolp333("Apply Armor Keybind", dhVC, "Apply Armor Keybind", "")),
@@ -20365,6 +20429,29 @@ function drinkhotlolhcwowzers()
     return nil
 end
 
+function hayzipolrainweb67()
+    if typeof(getgenv) == "function" and getgenv().RainTableNoUI == true then
+        return true
+    end
+    local r = shared.rain
+    return type(r) == "table" and r.UI == false
+end
+
+function haybedlolvcen67()
+    local dh = drinkhotlolhcwowzers()
+    if not dh then
+        return false
+    end
+    local vc = dh["Value Changer"] or dh["Fun Edits"]
+    return type(vc) == "table" and vc.Enabled == true
+end
+
+function ripbedlolbaen67()
+    local util = shared.rain and shared.rain.Utilities
+    local ba = type(util) == "table" and util["Buy Armor"] or nil
+    return type(ba) == "table" and ba.Enabled == true or ba == true
+end
+
 function bobomglolhiaogetrain()
     if type(icecowlolegetrain) == "function" then
         if icecowlolegetrain("Game Specific.Des Hood.Inf Ammo") then
@@ -20953,23 +21040,29 @@ function pierunlolhcsvwowzers(v, defaultOn)
 end
 
 function kitenahlolhavwowzers()
+    if not haybedlolvcen67() then
+        return "0"
+    end
     local dh = drinkhotlolhcwowzers()
     local vc = dh and dh["Value Changer"]
     local legacy = dh and dh["Fun Edits"]
     local v = (type(vc) == "table" and vc["Armor Value"])
         or (type(legacy) == "table" and legacy["Armor Value"])
         or (dh and dh["Armor Value"])
-    return pierunlolhcsvwowzers(v, true)
+    return pierunlolhcsvwowzers(v, false)
 end
 
 function teaducklolhmvgetrain()
+    if not haybedlolvcen67() then
+        return "0"
+    end
     local dh = drinkhotlolhcwowzers()
     local vc = dh and dh["Value Changer"]
     local legacy = dh and dh["Fun Edits"]
     local v = (type(vc) == "table" and vc["Muscle Value"])
         or (type(legacy) == "table" and legacy["Muscle Value"])
         or (dh and dh["Muscle Value"])
-    return pierunlolhcsvwowzers(v, true)
+    return pierunlolhcsvwowzers(v, false)
 end
 
 local function midtoelolhfs333(key, value)
@@ -21000,10 +21093,16 @@ local function hophilolhsav333()
 end
 
 function cowsitlolhaa67()
+    if not haybedlolvcen67() then
+        return
+    end
     task.spawn(function()
-        local buy = type(Mango) == "table" and Mango._zipsocklolrtpa333
-        if type(buy) ~= "function" and typeof(getgenv) == "function" then
-            buy = getgenv().armmidlolrtpagetrain
+        local buy = nil
+        if ripbedlolbaen67() then
+            buy = type(Mango) == "table" and Mango._zipsocklolrtpa333
+            if type(buy) ~= "function" and typeof(getgenv) == "function" then
+                buy = getgenv().armmidlolrtpagetrain
+            end
         end
         if hophilolhsav333() < 200 and type(buy) == "function" then
             for _ = 1, 3 do
@@ -21023,6 +21122,9 @@ function cowsitlolhaa67()
 end
 
 function wethoplolhamwowzers()
+    if not haybedlolvcen67() then
+        return
+    end
     midtoelolhfs333("MuscleInformation", teaducklolhmvgetrain())
 end
 
@@ -23221,6 +23323,7 @@ local function joybuglolhiaingr()
 end
 
 local desHoodActionLast = {}
+local desHoodActionsPrimed = false
 local killAllHooksInited = false
 local desHoodBootConn = nil
 local desHoodGetgenvDone = false
@@ -23454,9 +23557,24 @@ local function owlballlolhapwowzers()
     if not next(merged) then
         return
     end
+    if not desHoodActionsPrimed then
+        desHoodActionsPrimed = true
+        for key, val in pairs(merged) do
+            desHoodActionLast[key] = tonumber(val) or 0
+        end
+        return
+    end
     local handlers = {
-        ["Apply Armor"] = cowsitlolhaa67,
-        ["Apply Muscle"] = wethoplolhamwowzers,
+        ["Apply Armor"] = function()
+            if haybedlolvcen67() then
+                cowsitlolhaa67()
+            end
+        end,
+        ["Apply Muscle"] = function()
+            if haybedlolvcen67() then
+                wethoplolhamwowzers()
+            end
+        end,
         ["Force Reset"] = boopcrylolhfrwowzers,
         ["Kill All"] = function()
             if bobomglolhcowowzers("Kill All Enabled") then
@@ -23509,7 +23627,7 @@ local function sadwormlolhkaingr()
                 hopnaplolhtkf67("On Respawn")
             end
         end
-        if dh then
+        if dh and haybedlolvcen67() then
             local vc = dh["Value Changer"] or dh["Fun Edits"]
             local ak = (type(vc) == "table" and vc["Apply Armor Keybind"]) or dh["Apply Armor Keybind"]
             if type(ak) == "string" and ak ~= "" then
