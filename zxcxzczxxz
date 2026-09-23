@@ -710,6 +710,68 @@ function egggudlolhkmb67(text)
         or text:find("moderation", 1, true) ~= nil
 end
 
+if type(shared.rain) == "table" then
+    if shared.rain.SilentAim == nil and type(shared.rain.beepcuplolsangr) == "table" then
+        shared.rain.SilentAim = shared.rain.beepcuplolsangr
+    end
+    if shared.rain.TriggerBot == nil and type(shared.rain.gudeatloltb333) == "table" then
+        shared.rain.TriggerBot = shared.rain.gudeatloltb333
+    end
+    if type(shared.rain.SilentAim) ~= "table" then
+        shared.rain.SilentAim = { Enabled = false }
+    end
+    if type(shared.rain.TriggerBot) ~= "table" then
+        shared.rain.TriggerBot = { Enabled = false }
+    end
+end
+
+function yeebeelolsaen67()
+    local r = shared.rain
+    if type(r) ~= "table" then
+        shared.rain = {}
+        r = shared.rain
+    end
+    if type(r.beepcuplolsangr) == "table" and type(r.SilentAim) ~= "table" then
+        r.SilentAim = r.beepcuplolsangr
+    end
+    if type(r.gudeatloltb333) == "table" and type(r.TriggerBot) ~= "table" then
+        r.TriggerBot = r.gudeatloltb333
+    end
+    if type(r.SilentAim) ~= "table" then
+        r.SilentAim = { Enabled = false }
+    end
+    if type(r.TriggerBot) ~= "table" then
+        r.TriggerBot = { Enabled = false }
+    end
+    shared.Rain = r
+end
+
+function beepsaplolsae67()
+    yeebeelolsaen67()
+    local sa = shared.rain and shared.rain.SilentAim
+    return type(sa) == "table" and sa.Enabled == true
+end
+
+
+
+function egggudlolhkmb67(text)
+    text = tostring(text or ""):lower()
+    if text == "" then
+        return false
+    end
+    return text:find("origin", 1, true) ~= nil
+        or text:find("too fast", 1, true) ~= nil
+        or text:find("shouldn", 1, true) ~= nil
+        or text:find("should do that", 1, true) ~= nil
+        or text:find("don't think", 1, true) ~= nil
+        or text:find("do that", 1, true) ~= nil
+        or text:find("exploit", 1, true) ~= nil
+        or text:find("cheat", 1, true) ~= nil
+        or text:find("teleport", 1, true) ~= nil
+        or text:find("invalid", 1, true) ~= nil
+        or text:find("moderation", 1, true) ~= nil
+end
+
 do
     -- Adonis bypass must never hard-crash the script (nil typeof/table.find/getgc on some executors).
     local okType = typeof or type
@@ -1410,9 +1472,20 @@ function drysnaillolpls333(layoutVal, default)
     return layoutStr == "Horizontal" and "Horizontal" or "Vertical"
 end
 
+function hayzipolrainweb67()
+    if typeof(getgenv) == "function" and getgenv().RainTableNoUI == true then
+        return true
+    end
+    local r = shared.rain
+    return type(r) == "table" and r.UI == false
+end
+
 function funshoelolacopwowzers()
     local r = shared.rain
     if type(r) ~= "table" then
+        return
+    end
+    if hayzipolrainweb67() then
         return
     end
     r.UI = r.UI ~= false
@@ -20427,14 +20500,6 @@ function drinkhotlolhcwowzers()
         end
     end
     return nil
-end
-
-function hayzipolrainweb67()
-    if typeof(getgenv) == "function" and getgenv().RainTableNoUI == true then
-        return true
-    end
-    local r = shared.rain
-    return type(r) == "table" and r.UI == false
 end
 
 function haybedlolvcen67()
