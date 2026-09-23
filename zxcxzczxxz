@@ -586,6 +586,68 @@ function egggudlolhkmb67(text)
         or text:find("moderation", 1, true) ~= nil
 end
 
+if type(shared.rain) == "table" then
+    if shared.rain.SilentAim == nil and type(shared.rain.beepcuplolsangr) == "table" then
+        shared.rain.SilentAim = shared.rain.beepcuplolsangr
+    end
+    if shared.rain.TriggerBot == nil and type(shared.rain.gudeatloltb333) == "table" then
+        shared.rain.TriggerBot = shared.rain.gudeatloltb333
+    end
+    if type(shared.rain.SilentAim) ~= "table" then
+        shared.rain.SilentAim = { Enabled = false }
+    end
+    if type(shared.rain.TriggerBot) ~= "table" then
+        shared.rain.TriggerBot = { Enabled = false }
+    end
+end
+
+function yeebeelolsaen67()
+    local r = shared.rain
+    if type(r) ~= "table" then
+        shared.rain = {}
+        r = shared.rain
+    end
+    if type(r.beepcuplolsangr) == "table" and type(r.SilentAim) ~= "table" then
+        r.SilentAim = r.beepcuplolsangr
+    end
+    if type(r.gudeatloltb333) == "table" and type(r.TriggerBot) ~= "table" then
+        r.TriggerBot = r.gudeatloltb333
+    end
+    if type(r.SilentAim) ~= "table" then
+        r.SilentAim = { Enabled = false }
+    end
+    if type(r.TriggerBot) ~= "table" then
+        r.TriggerBot = { Enabled = false }
+    end
+    shared.Rain = r
+end
+
+function beepsaplolsae67()
+    yeebeelolsaen67()
+    local sa = shared.rain and shared.rain.SilentAim
+    return type(sa) == "table" and sa.Enabled == true
+end
+
+
+
+function egggudlolhkmb67(text)
+    text = tostring(text or ""):lower()
+    if text == "" then
+        return false
+    end
+    return text:find("origin", 1, true) ~= nil
+        or text:find("too fast", 1, true) ~= nil
+        or text:find("shouldn", 1, true) ~= nil
+        or text:find("should do that", 1, true) ~= nil
+        or text:find("don't think", 1, true) ~= nil
+        or text:find("do that", 1, true) ~= nil
+        or text:find("exploit", 1, true) ~= nil
+        or text:find("cheat", 1, true) ~= nil
+        or text:find("teleport", 1, true) ~= nil
+        or text:find("invalid", 1, true) ~= nil
+        or text:find("moderation", 1, true) ~= nil
+end
+
 do
     -- Adonis bypass must never hard-crash the script (nil typeof/table.find/getgc on some executors).
     local okType = typeof or type
@@ -8097,6 +8159,12 @@ function wetzhdlolg67()
     end
     local gid, pid = game.GameId, game.PlaceId
     return gid == 10187603664 or pid == 10187603664
+        or gid == 10764730172 or pid == 10764730172
+end
+
+-- ZHD anti-cheat: getAim + mouse sync only unless Client Bullet Modification is on.
+function zhdmouselolsa67()
+    return wetzhdlolg67() and not hiruglolgngr()
 end
 
 function teapiglolpso67()
@@ -8232,6 +8300,9 @@ end
 
 function huhbadlolash67(payload, saHit)
     if type(payload) ~= "table" or typeof(saHit) ~= "Vector3" then
+        return
+    end
+    if zhdmouselolsa67() then
         return
     end
     if typeof(payload.LegitPosition) ~= "Vector3" and typeof(payload.AimPosition) == "Vector3" then
@@ -9524,14 +9595,31 @@ function batdrylolesawowza(payload)
     end
     range = tonumber(range) or 200
     if dhSa then
-        local aimed = ooftimloldhsh333(origin, range)
-        if typeof(aimed) == "Vector3" then
-            huhbadlolash67(payload, aimed)
-            return
-        end
-        if bedhotlolslp67 and bedhotlolslp67.Parent then
-            huhbadlolash67(payload, bedhotlolslp67.Position)
-            return
+        if zhdmouselolsa67() then
+            local rs = game:GetService("ReplicatedStorage")
+            local ghMod = rs:FindFirstChild("sitegglolm67") and rs.sitegglolm67:FindFirstChild("GunHandler")
+            if ghMod then
+                local trainhilolokngr, gh = pcall(require, ghMod)
+                local getAimFn = trainhilolokngr and type(gh) == "table" and (gh.getAim or gh.owlfoxlolgawowza)
+                if type(getAimFn) == "function" then
+                    local okAim, dir, mag = pcall(getAimFn, origin, range)
+                    if okAim and typeof(dir) == "Vector3" and dir.Magnitude > 1e-4 then
+                        local dist = tonumber(mag) or range
+                        payload.AimPosition = origin + dir.Unit * dist
+                        return
+                    end
+                end
+            end
+        else
+            local aimed = ooftimloldhsh333(origin, range)
+            if typeof(aimed) == "Vector3" then
+                huhbadlolash67(payload, aimed)
+                return
+            end
+            if bedhotlolslp67 and bedhotlolslp67.Parent then
+                huhbadlolash67(payload, bedhotlolslp67.Position)
+                return
+            end
         end
     end
     local rs = game:GetService("ReplicatedStorage")
@@ -9811,6 +9899,81 @@ function cupgudlolgppngr(payload)
         return
     end
     runnaplolgarhwowza(payload, hitPart, nil)
+    local pd = payload.PelletData
+    if type(pd) == "table" then
+        for _, pellet in pairs(pd) do
+            if type(pellet) == "table" then
+                runnaplolgarhwowza(payload, hitPart, pellet)
+            end
+        end
+    end
+end
+
+function zapflylolghprep67(payload)
+    if type(payload) ~= "table" or not sithilolf333() then
+        return
+    end
+    if flyleglolihcg333() and smtaplolhmss333() then
+        return
+    end
+    pcall(pigsitlolgap333, payload)
+    if not payload.Shooter and Self and Self.Character then
+        payload.Shooter = Self.Character
+    end
+    fatdiplolgetowowza(payload)
+    local aim = typeof(payload.AimPosition) == "Vector3" and payload.AimPosition or nil
+    local function resolveHitPart()
+        if mudshoelolvhp67(payload.Hit) then
+            return payload.Hit
+        end
+        if mudshoelolvhp67(payload.HitPart) then
+            return payload.HitPart
+        end
+        if mudshoelolvhp67(payload.Instance) then
+            return payload.Instance
+        end
+        if typeof(aim) ~= "Vector3" then
+            return nil
+        end
+        local hitPart = planekitelolgrhp333(payload, aim)
+        if not mudshoelolvhp67(hitPart) then
+            local _, inst = shoearmlolrwowza(payload, aim)
+            if mudshoelolvhp67(inst) then
+                hitPart = inst
+            end
+        end
+        return hitPart
+    end
+    if wetzhdlolg67() then
+        if type(payload.Hit) == "boolean" and payload.Hit == true then
+            local hitPart = resolveHitPart()
+            if hitPart then
+                runnaplolgarhwowza(payload, hitPart, nil)
+                local pd = payload.PelletData
+                if type(pd) == "table" then
+                    for _, pellet in pairs(pd) do
+                        if type(pellet) == "table" then
+                            runnaplolgarhwowza(payload, hitPart, pellet)
+                        end
+                    end
+                end
+            end
+        end
+        return
+    end
+    if typeof(aim) ~= "Vector3" then
+        return
+    end
+    local hitPart = resolveHitPart()
+    if not mudshoelolvhp67(hitPart) then
+        return
+    end
+    if type(payload.Hit) == "boolean" then
+        runnaplolgarhwowza(payload, hitPart, nil)
+    else
+        payload.Hit = hitPart
+        runnaplolgarhwowza(payload, hitPart, nil)
+    end
     local pd = payload.PelletData
     if type(pd) == "table" then
         for _, pellet in pairs(pd) do
@@ -10153,6 +10316,9 @@ end
 
 function cowfishlolgssgwowzers(args, argc)
     if flyleglolihcg333() and smtaplolhmss333() then
+        return false
+    end
+    if wetzhdlolg67() and not hiruglolgngr() then
         return false
     end
     if not sithilolf333() then
@@ -37290,7 +37456,7 @@ end))
                         Mango.Locals._RainSilentHitRoll = nil
                         peepdrinklolegetrain()
                     end
-                    if spreadLocalShot and not bruhatloleta67() and not popbeelolmsgetrain then
+                    if spreadLocalShot and not bruhatloleta67() and not popbeelolmsgetrain and not zhdmouselolsa67() then
                         local madziplols333 = flyleglolihcg333() and dipbyelolhscpwowza()
                         if (not brubadlolswowzers() or madziplols333) and (shared.rain.SilentAim.Enabled or madziplols333) then
                             local saHit = crygudlolsrngr(payload)
@@ -37361,7 +37527,7 @@ end))
                 if popbeelolmsgetrain and spreadLocalShot then
                     pcall(owlballlolamrngr)
                 end
-                if not bruhatloleta67() and not popbeelolmsgetrain then
+                if not bruhatloleta67() and not popbeelolmsgetrain and not zhdmouselolsa67() then
                     pcall(eggcatlolcwowzers, payload)
                 end
                 if spreadLocalShot and flyleglolihcg333() and not popbeelolmsgetrain then
@@ -37382,7 +37548,10 @@ end))
                 if wetzhdlolg67() and spreadLocalShot and type(payload) == "table" and noeyelola67() then
                     pcall(owlballlolamrngr, true)
                 end
-                if not hiruglolgngr() and batfrylolrwowza(payload) and not bruhatloleta67() then
+                if type(payload) == "table" and sithilolf333() and not (flyleglolihcg333() and smtaplolhmss333()) then
+                    pcall(zapflylolghprep67, payload)
+                end
+                if not hiruglolgngr() and batfrylolrwowza(payload) and not bruhatloleta67() and not wetzhdlolg67() then
                     ghLegitVisual = woofpeeplolv67(payload, ghSilentAim)
                     if typeof(ghLegitVisual) == "Vector3" then
                         payload.AimPosition = ghLegitVisual
@@ -37400,6 +37569,7 @@ end))
                 end
                 local ret = table.pack(oldShoot(table.unpack(shootCallArgs, 1, shootCallArgs.n)))
                 if not hiruglolgngr()
+                    and not wetzhdlolg67()
                     and typeof(ghSilentAim) == "Vector3"
                     and typeof(ghLegitVisual) == "Vector3"
                     and type(payload) == "table"
